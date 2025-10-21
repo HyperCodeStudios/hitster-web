@@ -37,6 +37,7 @@
       debug.textContent += msg + "\n";
     }
 
+    // --- Token aus URL oder localStorage lesen ---
     (function initAuth() {
       const hash = window.location.hash;
       let stored = window.localStorage.getItem("spotify_token");
@@ -46,14 +47,19 @@
           token = found.split("=")[1];
           window.localStorage.setItem("spotify_token", token);
           window.location.hash = "";
+          logDebug("Access Token gespeichert: " + token.substring(0,10) + "...");
         }
-      } else if (stored) token = stored;
+      } else if (stored) {
+        token = stored;
+        logDebug("Token aus localStorage: " + token.substring(0,10) + "...");
+      }
 
       if (!token) showLogin(); else showPlaylists();
     })();
 
     function showLogin() {
       const loginUrl = `${AUTH_ENDPOINT}?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=${RESPONSE_TYPE}&scope=playlist-read-private%20playlist-read-collaborative`;
+      logDebug("Login URL: " + loginUrl);
       app.innerHTML = `<p>Logge dich mit deinem Spotify-Account ein, um deine Playlists zu sehen.</p>
         <a href="${loginUrl}"><button>Mit Spotify verbinden</button></a>`;
     }
@@ -73,6 +79,7 @@
         const { data } = await axios.get("https://api.spotify.com/v1/me/playlists", {
           headers: { Authorization: "Bearer " + token },
         });
+        logDebug("Playlists geladen: " + data.items.length);
         const container = document.getElementById("playlists");
         container.innerHTML = "";
         data.items.forEach(p => {
@@ -84,6 +91,7 @@
           container.appendChild(div);
         });
       } catch (err) {
+        logDebug("Fehler beim Laden der Playlists: " + err);
         app.innerHTML = `<p>Fehler: ${err.message}</p><button onclick="logout()">Neu einloggen</button>`;
       }
     }
@@ -95,6 +103,7 @@
         const { data } = await axios.get(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
           headers: { Authorization: "Bearer " + token },
         });
+        logDebug("Songs geladen: " + data.items.length);
         songsDiv.innerHTML = "";
         for (const item of data.items) {
           const t = item.track;
@@ -107,15 +116,16 @@
             <canvas id="qr-${t.id}" width="100" height="100"></canvas>`;
           songsDiv.appendChild(div);
 
-          // QR-Code auf Spotify Web Player Link ändern
-          const webPlayerUrl = `https://open.spotify.com/track/${t.id}?autoplay=true`;
+          // Deep-Link für Spotify App / Web Player
+          const webUrl = `https://open.spotify.com/track/${t.id}?autoplay=true`;
           QRCode.toCanvas(
             document.getElementById(`qr-${t.id}`),
-            webPlayerUrl,
+            webUrl,
             { width: 100, color: { dark: "#1db954", light: "#0000" } }
           );
         }
       } catch (err) {
+        logDebug("Fehler beim Laden der Songs: " + err);
         songsDiv.innerHTML = `<p>Fehler beim Laden: ${err.message}</p>`;
       }
     }
