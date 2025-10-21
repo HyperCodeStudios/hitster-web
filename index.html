@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Hitster Web – Spotify Edition</title>
+  <title>Hitster Web – Spotify Edition (Debug)</title>
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
   <style>
@@ -14,10 +14,7 @@
       color: #fff;
       padding: 20px;
     }
-    h1 {
-      text-align: center;
-      color: #1db954;
-    }
+    h1 { text-align: center; color: #1db954; }
     button {
       background: #1db954;
       border: none;
@@ -28,33 +25,24 @@
       font-weight: bold;
     }
     button:hover { background: #1ed760; }
-    .playlist-grid {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      justify-content: center;
+    .playlist-grid, .song-grid {
+      display: flex; flex-wrap: wrap; gap: 12px; justify-content: center;
     }
     .playlist-card, .song-card {
-      background: #181818;
-      border-radius: 10px;
-      padding: 15px;
-      width: 200px;
-      text-align: center;
-      box-shadow: 0 0 8px #000;
-    }
-    .song-grid {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-      justify-content: center;
-      margin-top: 20px;
+      background: #181818; border-radius: 10px; padding: 15px; width: 200px;
+      text-align: center; box-shadow: 0 0 8px #000;
     }
     canvas { margin-top: 10px; }
+    #debug {
+      background: #000; color: #0f0; font-family: monospace;
+      padding: 10px; border-radius: 8px; margin-top: 20px; white-space: pre-wrap;
+    }
   </style>
 </head>
 <body>
   <h1>🎶 Hitster Web (Spotify)</h1>
   <div id="app" style="text-align:center;"></div>
+  <div id="debug"></div>
 
   <script>
     const CLIENT_ID = "ba3eba27da4948e7bcad1872acdc48ab";
@@ -63,11 +51,24 @@
     const RESPONSE_TYPE = "token";
 
     const app = document.getElementById("app");
+    const debug = document.getElementById("debug");
     let token = "";
+
+    function logDebug(msg) {
+      console.log("[DEBUG]", msg);
+      debug.textContent += msg + "\n";
+    }
 
     // --- Token aus URL oder localStorage lesen ---
     (function initAuth() {
+      logDebug("Init Auth...");
+      logDebug("Redirect URI: " + REDIRECT_URI);
+      logDebug("Client ID: " + CLIENT_ID);
+      logDebug("Response Type: " + RESPONSE_TYPE);
+
       const hash = window.location.hash;
+      logDebug("URL Hash: " + hash);
+
       let stored = window.localStorage.getItem("spotify_token");
 
       if (!stored && hash) {
@@ -78,9 +79,11 @@
           token = found.split("=")[1];
           window.localStorage.setItem("spotify_token", token);
           window.location.hash = "";
+          logDebug("Access Token gespeichert: " + token.substring(0, 10) + "...");
         }
       } else if (stored) {
         token = stored;
+        logDebug("Token aus localStorage: " + token.substring(0, 10) + "...");
       }
 
       if (!token) showLogin();
@@ -88,9 +91,11 @@
     })();
 
     function showLogin() {
+      const loginUrl = `${AUTH_ENDPOINT}?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=${RESPONSE_TYPE}&scope=playlist-read-private%20playlist-read-collaborative`;
+      logDebug("Login URL:\n" + loginUrl);
       app.innerHTML = `
         <p>Logge dich mit deinem Spotify-Account ein, um deine Playlists zu sehen.</p>
-        <a href="${AUTH_ENDPOINT}?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=${RESPONSE_TYPE}&scope=playlist-read-private%20playlist-read-collaborative">
+        <a href="${loginUrl}">
           <button>Mit Spotify verbinden</button>
         </a>
       `;
@@ -113,6 +118,7 @@
         const { data } = await axios.get("https://api.spotify.com/v1/me/playlists", {
           headers: { Authorization: "Bearer " + token },
         });
+        logDebug("Playlists erfolgreich geladen (" + data.items.length + ")");
         const container = document.getElementById("playlists");
         container.innerHTML = "";
         data.items.forEach(p => {
@@ -126,6 +132,7 @@
           container.appendChild(div);
         });
       } catch (err) {
+        logDebug("Fehler beim Laden der Playlists: " + err);
         app.innerHTML = `<p>Fehler: ${err.message}</p><button onclick="logout()">Neu einloggen</button>`;
       }
     }
@@ -137,6 +144,7 @@
         const { data } = await axios.get(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
           headers: { Authorization: "Bearer " + token },
         });
+        logDebug("Songs geladen: " + data.items.length);
         songsDiv.innerHTML = "";
         for (const item of data.items) {
           const t = item.track;
@@ -157,6 +165,7 @@
           );
         }
       } catch (err) {
+        logDebug("Fehler beim Laden der Songs: " + err);
         songsDiv.innerHTML = `<p>Fehler beim Laden: ${err.message}</p>`;
       }
     }
