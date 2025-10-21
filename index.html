@@ -2,183 +2,123 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Hitster Web – Spotify Edition</title>
-
-  <!-- Bibliotheken -->
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
-
   <style>
-    body { font-family: system-ui, sans-serif; margin:0; padding:20px; background:#121212; color:#fff;}
-    h1, h2 { text-align:center; color:#1db954;}
-    button {
-      background: #1db954; border:none; color:white; padding:12px 20px; border-radius:8px;
-      cursor:pointer; font-weight:bold; margin:5px; width:80%;
-    }
-    button:hover { background:#1ed760;}
-    #menu, #print, #game { max-width:600px; margin: auto; }
-    .playlist-grid, .song-grid, .cards-grid {
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(120px,1fr));
-      gap:12px; justify-items:center; margin-top:20px;
-    }
-    .playlist-card, .song-card, .pdf-card {
-      background:#181818; border-radius:10px; padding:10px; text-align:center; box-shadow:0 0 8px #000;
-    }
-    canvas { margin-top:5px; }
-    video { width:100%; border-radius:10px; margin-top:10px; }
-    @media print {
-      body { background:#fff; color:#000; }
-    }
+    body { font-family: system-ui, sans-serif; margin:0; background:#121212; color:#fff; padding:20px; }
+    h1 { text-align:center; color:#1db954; }
+    button { background:#1db954; border:none; color:white; padding:10px 16px; border-radius:6px; cursor:pointer; font-weight:bold; }
+    button:hover { background:#1ed760; }
+    .playlist-grid, .song-grid { display:flex; flex-wrap:wrap; gap:12px; justify-content:center; }
+    .playlist-card, .song-card { background:#181818; border-radius:10px; padding:15px; width:200px; text-align:center; box-shadow:0 0 8px #000; }
+    canvas { margin-top:10px; }
+    #debug { background:#000; color:#0f0; font-family:monospace; padding:10px; border-radius:8px; margin-top:20px; white-space:pre-wrap; }
   </style>
 </head>
 <body>
-  <h1>🎶 Hitster Web</h1>
-  <div id="menu"></div>
-  <div id="print" style="display:none;"></div>
-  <div id="game" style="display:none;">
-    <h2>Spielmodus</h2>
-    <div id="scanner" style="width:100%;"></div>
-    <button onclick="backToMenu()">Zurück</button>
-  </div>
-  <div id="debug" style="display:none;"></div>
+  <h1>🎶 Hitster Web (Spotify)</h1>
+  <div id="app" style="text-align:center;"></div>
+  <div id="debug"></div>
 
-<script>
-(async function(){
+  <script>
+    const CLIENT_ID = "ba3eba27da4948e7bcad1872acdc48ab";
+    const REDIRECT_URI = "https://hypercodestudios.github.io/hitster-web/";
+    const AUTH_ENDPOINT = "https://accounts.spotify.com/authorize";
+    const RESPONSE_TYPE = "token";
 
-/* ---------------- CONFIG ---------------- */
-const CLIENT_ID = "ba3eba27da4948e7bcad1872acdc48ab"; // <-- Spotify Client-ID einfügen
-const REDIRECT_URI = "https://hypercodestudios.github.io/hitster-web/";
-const AUTH_ENDPOINT = "https://accounts.spotify.com/authorize";
-const TOKEN_ENDPOINT = "https://accounts.spotify.com/api/token";
-const SCOPES = "playlist-read-private playlist-read-collaborative";
+    const app = document.getElementById("app");
+    const debug = document.getElementById("debug");
+    let token = "";
 
-/* ---------------- HELPERS ---------------- */
-function log(msg){console.log(msg);}
-function show(id){document.getElementById(id).style.display="block";}
-function hide(id){document.getElementById(id).style.display="none";}
-function clear(id){document.getElementById(id).innerHTML="";}
-
-async function generateCodeVerifier(length = 128) {
-  let text = ''; const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  for(let i=0;i<length;i++) text += possible.charAt(Math.floor(Math.random()*possible.length));
-  return text;
-}
-
-async function generateCodeChallenge(verifier){
-  const encoder = new TextEncoder();
-  const data = encoder.encode(verifier);
-  const digest = await crypto.subtle.digest('SHA-256', data);
-  return btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-}
-
-/* ---------------- PKCE FLOW ---------------- */
-async function redirectToAuth(){
-  const verifier = await generateCodeVerifier();
-  const challenge = await generateCodeChallenge(verifier);
-  localStorage.setItem("verifier", verifier);
-  const params = new URLSearchParams({
-    response_type:"code", client_id:CLIENT_ID, scope:SCOPES, redirect_uri:REDIRECT_URI,
-    code_challenge_method:"S256", code_challenge:challenge
-  });
-  window.location = `${AUTH_ENDPOINT}?${params.toString()}`;
-}
-
-async function handleRedirect(){
-  const params = new URLSearchParams(window.location.search);
-  const code = params.get("code");
-  const verifier = localStorage.getItem("verifier");
-  if(!code) return null;
-  const body = new URLSearchParams({client_id:CLIENT_ID, grant_type:"authorization_code", code, redirect_uri:REDIRECT_URI, code_verifier:verifier});
-  try{
-    const res = await fetch(TOKEN_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body});
-    const data = await res.json();
-    if(data.access_token){ localStorage.setItem("spotify_token", data.access_token); window.history.replaceState({}, document.title, REDIRECT_URI); return data.access_token; }
-    return null;
-  }catch(e){console.error(e); return null;}
-}
-
-/* ---------------- APP STATE ---------------- */
-let accessToken = localStorage.getItem("spotify_token") || await handleRedirect();
-
-/* ---------------- MENU ---------------- */
-function renderMenu(){
-  clear("menu"); hide("print"); hide("game");
-  const html = `
-    <h2>Willkommen!</h2>
-    <button onclick="startGame()">Spiel starten</button>
-    <button onclick="printCards()">Karten ausdrucken</button>
-    <button onclick="logout()">Logout</button>
-  `;
-  document.getElementById("menu").innerHTML = html; show("menu");
-}
-
-/* ---------------- LOGOUT ---------------- */
-function logout(){localStorage.removeItem("spotify_token"); accessToken=""; renderMenu();}
-
-/* ---------------- PLAY GAME ---------------- */
-window.startGame = function(){
-  hide("menu"); show("game");
-  const html5QrcodeScanner = new Html5Qrcode("scanner");
-  html5QrcodeScanner.start(
-    { facingMode:"environment" },
-    { fps:10, qrbox:250 },
-    (decodedText, decodedResult) => {
-      alert("Gescannter Song QR-Code: "+decodedText+"\nSpäter kann hier Spotify Player aufgerufen werden.");
+    function logDebug(msg) {
+      console.log("[DEBUG]", msg);
+      debug.textContent += msg + "\n";
     }
-  ).catch(err=>console.error(err));
-}
 
-/* ---------------- PRINT CARDS ---------------- */
-window.printCards = async function(){
-  hide("menu"); show("print");
-  clear("print");
-  const container = document.getElementById("print");
-  container.innerHTML="<h2>Wähle eine Playlist</h2><div id='playlists' class='playlist-grid'>Lade...</div>";
-  try{
-    const res = await axios.get("https://api.spotify.com/v1/me/playlists",{headers:{Authorization:"Bearer "+accessToken}});
-    const grid = document.getElementById("playlists"); grid.innerHTML="";
-    res.data.items.forEach(p=>{
-      const div = document.createElement("div");
-      div.className="playlist-card";
-      div.innerHTML=`<b>${p.name}</b><br><button onclick="generatePDF('${p.id}')">PDF generieren</button>`;
-      grid.appendChild(div);
-    });
-  }catch(e){container.innerHTML="Fehler beim Laden der Playlists";}
-}
+    (function initAuth() {
+      const hash = window.location.hash;
+      let stored = window.localStorage.getItem("spotify_token");
+      if (!stored && hash) {
+        const found = hash.substring(1).split("&").find(p => p.startsWith("access_token"));
+        if (found) {
+          token = found.split("=")[1];
+          window.localStorage.setItem("spotify_token", token);
+          window.location.hash = "";
+        }
+      } else if (stored) token = stored;
 
-/* ---------------- GENERATE PDF ---------------- */
-window.generatePDF = async function(playlistId){
-  const { jsPDF } = window.jspdf;
-  const pdf = new jsPDF();
-  const res = await axios.get(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`,{headers:{Authorization:"Bearer "+accessToken}});
-  const tracks = res.data.items.map(i=>i.track).filter(t=>t);
-  let x=10,y=10,counter=0;
-  for(const t of tracks){
-    const canvas = document.createElement("canvas");
-    await QRCode.toCanvas(canvas, t.external_urls.spotify,{width:80});
-    pdf.setFontSize(10);
-    pdf.rect(x,y,80,80);
-    pdf.text(t.name,x+5,y+10);
-    pdf.text(t.artists[0].name,x+5,y+18);
-    pdf.addImage(canvas.toDataURL(),"PNG",x+5,y+25,70,70);
-    counter++;
-    x+=90;
-    if(counter%3===0){x=10; y+=90;}
-    if(counter%12===0 && counter!==0){pdf.addPage(); x=10; y=10;}
-  }
-  pdf.save("hitster_cards.pdf");
-}
+      if (!token) showLogin(); else showPlaylists();
+    })();
 
-/* ---------------- BACK TO MENU ---------------- */
-window.backToMenu = renderMenu;
+    function showLogin() {
+      const loginUrl = `${AUTH_ENDPOINT}?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=${RESPONSE_TYPE}&scope=playlist-read-private%20playlist-read-collaborative`;
+      app.innerHTML = `<p>Logge dich mit deinem Spotify-Account ein, um deine Playlists zu sehen.</p>
+        <a href="${loginUrl}"><button>Mit Spotify verbinden</button></a>`;
+    }
 
-/* ---------------- INIT ---------------- */
-if(!accessToken){renderMenu();} else{renderMenu();}
+    function logout() {
+      window.localStorage.removeItem("spotify_token");
+      token = "";
+      showLogin();
+    }
 
-})();
-</script>
+    async function showPlaylists() {
+      app.innerHTML = `<button onclick="logout()">Logout</button>
+        <h2>Deine Playlists</h2>
+        <div id="playlists" class="playlist-grid">Lade...</div>
+        <div id="songs" class="song-grid"></div>`;
+      try {
+        const { data } = await axios.get("https://api.spotify.com/v1/me/playlists", {
+          headers: { Authorization: "Bearer " + token },
+        });
+        const container = document.getElementById("playlists");
+        container.innerHTML = "";
+        data.items.forEach(p => {
+          const div = document.createElement("div");
+          div.className = "playlist-card";
+          div.innerHTML = `<img src="${p.images[0]?.url || ''}" width="150" style="border-radius:6px"><br>
+            <b>${p.name}</b><br>
+            <button onclick="loadTracks('${p.id}')">Songs anzeigen</button>`;
+          container.appendChild(div);
+        });
+      } catch (err) {
+        app.innerHTML = `<p>Fehler: ${err.message}</p><button onclick="logout()">Neu einloggen</button>`;
+      }
+    }
+
+    async function loadTracks(playlistId) {
+      const songsDiv = document.getElementById("songs");
+      songsDiv.innerHTML = "Lade Songs...";
+      try {
+        const { data } = await axios.get(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
+          headers: { Authorization: "Bearer " + token },
+        });
+        songsDiv.innerHTML = "";
+        for (const item of data.items) {
+          const t = item.track;
+          if (!t) continue;
+          const div = document.createElement("div");
+          div.className = "song-card";
+          div.innerHTML = `<b>${t.name}</b><br>
+            <small>${t.artists[0].name}</small><br>
+            <small>${t.album.release_date?.slice(0,4) || ""}</small><br>
+            <canvas id="qr-${t.id}" width="100" height="100"></canvas>`;
+          songsDiv.appendChild(div);
+
+          // QR-Code auf Spotify Web Player Link ändern
+          const webPlayerUrl = `https://open.spotify.com/track/${t.id}?autoplay=true`;
+          QRCode.toCanvas(
+            document.getElementById(`qr-${t.id}`),
+            webPlayerUrl,
+            { width: 100, color: { dark: "#1db954", light: "#0000" } }
+          );
+        }
+      } catch (err) {
+        songsDiv.innerHTML = `<p>Fehler beim Laden: ${err.message}</p>`;
+      }
+    }
+  </script>
 </body>
 </html>
