@@ -3,319 +3,208 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Hitster Web – Spotify PKCE Login</title>
+  <title>Hitster Web – Ultimate Edition</title>
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
   <style>
-    body {
-      font-family: system-ui, sans-serif;
-      margin: 0;
-      background: #121212;
-      color: #fff;
-      padding: 20px;
-    }
+    body { font-family: system-ui, sans-serif; margin: 0; background: #121212; color: #fff; padding: 20px; }
     h1 { text-align: center; color: #1db954; }
-    button {
-      background: #1db954; border: none; color: white;
-      padding: 10px 16px; border-radius: 6px; cursor: pointer; font-weight: bold;
-    }
+    button { background: #1db954; border: none; color: white; padding: 10px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; margin: 5px; }
     button:hover { background: #1ed760; }
-    .playlist-grid, .song-grid {
-      display: flex; flex-wrap: wrap; gap: 12px; justify-content: center;
-    }
-    .playlist-card, .song-card {
-      background: #181818; border-radius: 10px; padding: 15px; width: 200px;
-      text-align: center; box-shadow: 0 0 8px #000;
-    }
-    canvas { margin-top: 10px; }
-    #debug {
-      background: #000; color: #0f0; font-family: monospace;
-      padding: 10px; border-radius: 8px; margin-top: 20px; white-space: pre-wrap;
-    }
+    .playlist-grid, .song-grid { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+    .playlist-card, .song-card { background: #181818; border-radius: 10px; padding: 15px; width: 200px; text-align: center; box-shadow: 0 0 8px #000; position: relative; }
+    .year-badge { font-size: 1.4em; font-weight: bold; margin: 10px 0; display: block; }
+    .source-badge { font-size: 0.7em; opacity: 0.7; }
+    canvas { margin-top: 10px; border-radius: 4px; }
   </style>
 </head>
 <body>
-  <h1>🎶 Hitster Web (Spotify PKCE)</h1>
+  <h1>🎶 Hitster Web (Discogs Powered)</h1>
   <div id="app" style="text-align:center;"></div>
-  <div id="debug"></div>
-
+  
   <script>
-    const CLIENT_ID = "ba3eba27da4948e7bcad1872acdc48ab"; // Deine ID
+    // --- KONFIGURATION ---
+    const SPOTIFY_CLIENT_ID = "ba3eba27da4948e7bcad1872acdc48ab"; // Deine Spotify ID
+    
+    const DISCOGS_TOKEN = "wqMZDlzvFFtlVOnUskoEiDMMlHlBsUFdJVBthaqZ"; 
+
     const REDIRECT_URI = "https://hypercodestudios.github.io/hitster-web/";
-    // HINWEIS: Hier die korrekten Spotify Endpoints nutzen
+    
+    // Spotify URLs (Korrekt)
     const AUTH_ENDPOINT = "https://accounts.spotify.com/authorize";
     const TOKEN_ENDPOINT = "https://accounts.spotify.com/api/token";
-    const SCOPES = "playlist-read-private playlist-read-collaborative";
+    const API_ENDPOINT = "https://api.spotify.com/v1";
 
-    const app = document.getElementById("app");
-    const debug = document.getElementById("debug");
-    let accessToken = "";
+    let accessToken = localStorage.getItem("spotify_token");
 
-    function log(msg) {
-      console.log(msg);
-      // Optional: Debug Text kurz halten oder ausblenden, wenn es zu viel wird
-      // debug.textContent += msg + "\n"; 
-    }
-
-    // --- PKCE AUTH FLOW --- (Unverändert)
-    async function generateCodeVerifier(length = 128) {
-      let text = '';
-      const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-      for (let i = 0; i < length; i++) {
-        text += possible.charAt(Math.floor(Math.random() * possible.length));
-      }
-      return text;
-    }
-
-    async function generateCodeChallenge(verifier) {
-      const encoder = new TextEncoder();
-      const data = encoder.encode(verifier);
-      const digest = await window.crypto.subtle.digest('SHA-256', data);
-      return btoa(String.fromCharCode(...new Uint8Array(digest)))
-        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-    }
-
-    async function redirectToAuth() {
-      const verifier = await generateCodeVerifier();
-      const challenge = await generateCodeChallenge(verifier);
-      localStorage.setItem("verifier", verifier);
-
-      const params = new URLSearchParams({
-        response_type: "code",
-        client_id: CLIENT_ID,
-        scope: SCOPES,
-        redirect_uri: REDIRECT_URI,
-        code_challenge_method: "S256",
-        code_challenge: challenge
-      });
-      window.location = `${AUTH_ENDPOINT}?${params.toString()}`;
-    }
-
-    async function handleRedirectCallback() {
-      const params = new URLSearchParams(window.location.search);
-      const code = params.get("code");
-      const verifier = localStorage.getItem("verifier");
-
-      if (!code) return null;
-      
-      // URL säubern
-      window.history.replaceState({}, document.title, REDIRECT_URI);
-
-      const body = new URLSearchParams({
-        client_id: CLIENT_ID,
-        grant_type: "authorization_code",
-        code,
-        redirect_uri: REDIRECT_URI,
-        code_verifier: verifier
-      });
-
-      try {
-        const response = await fetch(TOKEN_ENDPOINT, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body
-        });
-        const data = await response.json();
-        if (data.access_token) {
-          localStorage.setItem("spotify_token", data.access_token);
-          return data.access_token;
-        }
-      } catch (err) {
-        log("Fehler Token: " + err);
-      }
-      return null;
-    }
-
-    // --- LOGIC: ORIGINAL JAHR FINDEN ---
-
-    // 1. Titel bereinigen (Wichtig für deutsche Schlager/Pop!)
-    // Entfernt: " - Remastered 2011", "(Live)", "feat. X", "Radio Edit"
-    function cleanTrackTitle(title) {
+    // --- HELPER: TITEL BEREINIGEN ---
+    function cleanTitle(title) {
         return title
-            .replace(/\s*-\s*.*remaster.*/i, '') 
+            .replace(/\s*-\s*.*remaster.*/i, '')
             .replace(/\s*\(.*remaster.*\)/i, '')
-            .replace(/\s*-\s*.*stereo.*/i, '')
             .replace(/\s*-\s*radio\s*edit.*/i, '')
             .replace(/\s*\(.*radio\s*edit.*\)/i, '')
             .replace(/\s*-\s*live.*/i, '')
             .replace(/\s*\(.*live.*\)/i, '')
-            .replace(/\s*feat\..*/i, '') // Features entfernen für bessere Trefferquote
+            .replace(/\s*feat\..*/i, '')
+            .replace(/\s*\/.*$/, '') // Entfernt alles nach einem Slash
             .trim();
     }
 
-    // 2. MusicBrainz API Abfrage (Search statt ISRC)
-    async function fetchBetterYear(artist, title, spotifyYear) {
-        const cleanTitle = cleanTrackTitle(title);
-        const query = `artist:"${artist}" AND recording:"${cleanTitle}"`;
-        const encodedQuery = encodeURIComponent(query);
+    // --- HELPER: DISCOGS API ---
+    async function getDiscogsYear(artist, title) {
+        if (!DISCOGS_TOKEN || DISCOGS_TOKEN === "HIER_DEINEN_DISCOGS_TOKEN_EINFÜGEN") return null;
+
+        const clean = cleanTitle(title);
+        const query = `${artist} - ${clean}`;
         
-        // Wir suchen nach Recordings, wollen aber die Release-Groups
-        const url = `https://musicbrainz.org/ws/2/recording/?query=${encodedQuery}&fmt=json&limit=3`;
+        // Wir suchen nach "Master" Releases und sortieren nach Jahr aufsteigend
+        // Das liefert meistens das absolut erste Vorkommen.
+        const url = `https://api.discogs.com/database/search?q=${encodeURIComponent(query)}&type=master&sort=year&sort_order=asc&token=${DISCOGS_TOKEN}`;
 
         try {
-            const response = await axios.get(url);
-            const recordings = response.data.recordings;
+            const res = await axios.get(url);
+            const items = res.data.results;
 
-            if (!recordings || recordings.length === 0) {
-                return spotifyYear; // Kein Treffer -> Fallback
+            // Suche das erste gültige Jahr (4 Ziffern)
+            const validItem = items.find(i => i.year && i.year.match(/^\d{4}$/));
+            
+            if (validItem) {
+                return { year: validItem.year, source: 'Discogs' };
             }
 
-            // Wir sammeln alle "first-release-dates" der gefundenen Release-Groups
-            let possibleYears = [];
-
-            recordings.forEach(rec => {
-                if (rec["release-groups"]) {
-                    rec["release-groups"].forEach(rg => {
-                        if (rg["first-release-date"]) {
-                            possibleYears.push(rg["first-release-date"].substring(0, 4));
-                        }
-                    });
-                }
-                // Fallback: Releases direkt prüfen, falls keine Group
-                if (rec.releases) {
-                     rec.releases.forEach(rel => {
-                        if (rel.date) possibleYears.push(rel.date.substring(0, 4));
-                     });
-                }
-            });
-
-            // Filtern: Nur valide Jahre (4 Ziffern)
-            possibleYears = possibleYears.filter(y => y && y.match(/^\d{4}$/)).sort();
-
-            // Das ALLERERSTE gefundene Jahr nehmen
-            if (possibleYears.length > 0) {
-                const bestYear = possibleYears[0];
-                // Sicherheitscheck: Wenn MusicBrainz sagt 1920 für einen Techno Song, ist was faul.
-                // Aber wir vertrauen hier mal der DB.
-                
-                // Extra Logik: Wenn MusicBrainz neuer ist als Spotify, behalte Spotify (selten, aber möglich)
-                if (parseInt(bestYear) > parseInt(spotifyYear) && spotifyYear !== "????") {
-                    return spotifyYear; 
-                }
-                return bestYear;
+            // Fallback: Wenn kein "Master" gefunden wurde, suchen wir nach normalen Releases (Singles etc.)
+            const urlRelease = `https://api.discogs.com/database/search?q=${encodeURIComponent(query)}&type=release&sort=year&sort_order=asc&token=${DISCOGS_TOKEN}`;
+            const resRel = await axios.get(urlRelease);
+            const validRelease = resRel.data.results.find(i => i.year && i.year.match(/^\d{4}$/));
+            
+            if (validRelease) {
+                return { year: validRelease.year, source: 'Discogs (Rel)' };
             }
 
         } catch (e) {
-            console.warn("MusicBrainz Error für " + title, e);
+            console.warn("Discogs Error:", e);
         }
-        
-        return spotifyYear;
+        return null;
     }
 
+    // --- AUTH FLOW ---
+    async function generateCodeVerifier(len=128) {
+        const arr = new Uint8Array(len);
+        window.crypto.getRandomValues(arr);
+        return btoa(String.fromCharCode(...arr)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'').substring(0,len);
+    }
+    async function generateCodeChallenge(v) {
+        const enc = new TextEncoder().encode(v);
+        const digest = await window.crypto.subtle.digest('SHA-256', enc);
+        return btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+    }
 
-    // --- APP LOGIK ---
+    async function login() {
+        const verifier = await generateCodeVerifier();
+        localStorage.setItem("verifier", verifier);
+        const challenge = await generateCodeChallenge(verifier);
+        const params = new URLSearchParams({
+            client_id: SPOTIFY_CLIENT_ID, response_type: "code", redirect_uri: REDIRECT_URI,
+            scope: "playlist-read-private playlist-read-collaborative", code_challenge_method: "S256", code_challenge: challenge
+        });
+        window.location = `${AUTH_ENDPOINT}?${params}`;
+    }
 
+    async function handleCallback() {
+        const code = new URLSearchParams(window.location.search).get("code");
+        if (!code) return;
+        window.history.replaceState({}, document.title, REDIRECT_URI);
+        const body = new URLSearchParams({
+            client_id: SPOTIFY_CLIENT_ID, grant_type: "authorization_code", code,
+            redirect_uri: REDIRECT_URI, code_verifier: localStorage.getItem("verifier")
+        });
+        try {
+            const res = await fetch(TOKEN_ENDPOINT, { method: "POST", headers: {"Content-Type":"application/x-www-form-urlencoded"}, body });
+            const data = await res.json();
+            if (data.access_token) {
+                localStorage.setItem("spotify_token", data.access_token);
+                location.reload();
+            }
+        } catch(e) { console.error(e); }
+    }
+
+    // --- APP LOGIC ---
     async function init() {
-      log("🚀 Starte Hitster Web");
-      accessToken = localStorage.getItem("spotify_token");
-      if (!accessToken) {
-        const newToken = await handleRedirectCallback();
-        if (newToken) accessToken = newToken;
-      }
-
-      if (!accessToken) {
-        app.innerHTML = `<button onclick="redirectToAuth()">Mit Spotify verbinden</button>`;
-        return;
-      }
-      showPlaylists();
+        if (!accessToken) { await handleCallback(); accessToken = localStorage.getItem("spotify_token"); }
+        if (!accessToken) { app.innerHTML = `<button onclick="login()">Login mit Spotify</button>`; return; }
+        
+        app.innerHTML = `<h2>Deine Playlists</h2><div id="playlists" class="playlist-grid">Lade...</div><div id="songs" class="song-grid"></div>`;
+        
+        try {
+            const { data } = await axios.get(`${API_ENDPOINT}/me/playlists`, { headers: { Authorization: "Bearer " + accessToken } });
+            document.getElementById("playlists").innerHTML = data.items.map(p => `
+                <div class="playlist-card">
+                    <img src="${p.images[0]?.url||''}" width="100%">
+                    <div style="margin:10px 0;"><b>${p.name}</b></div>
+                    <button onclick="loadTracks('${p.id}')">Starten</button>
+                </div>
+            `).join("");
+        } catch (e) { localStorage.removeItem("spotify_token"); app.innerHTML += "<br>Session expired."; }
     }
 
-    async function showPlaylists() {
-      app.innerHTML = `
-        <button onclick="logout()">Logout</button>
-        <h2>Deine Playlists</h2>
-        <div id="playlists" class="playlist-grid">Lade...</div>
-        <div id="songs" class="song-grid"></div>
-      `;
-      try {
-        const { data } = await axios.get("https://api.spotify.com/v1/me/playlists", {
-          headers: { Authorization: "Bearer " + accessToken },
-        });
-        const container = document.getElementById("playlists");
-        container.innerHTML = "";
-        data.items.forEach(p => {
-          const div = document.createElement("div");
-          div.className = "playlist-card";
-          div.innerHTML = `
-            <img src="${p.images[0]?.url || ''}" width="150" style="border-radius:6px"><br>
-            <b>${p.name}</b><br>
-            <button onclick="loadTracks('${p.id}')">Songs laden</button>
-          `;
-          container.appendChild(div);
-        });
-      } catch (err) {
-        app.innerHTML = `<p>Fehler (Session abgelaufen?): ${err.message}</p><button onclick="logout()">Neu einloggen</button>`;
-      }
-    }
-
-    async function loadTracks(playlistId) {
-      const songsDiv = document.getElementById("songs");
-      songsDiv.innerHTML = "Lade Songs aus Spotify...";
-      
-      try {
-        let allTracks = [];
-        let url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?fields=next,items(track(id,name,external_urls,artists,album(release_date,images)))`;
+    async function loadTracks(pid) {
+        const box = document.getElementById("songs");
+        box.innerHTML = `<p>Lade Playlist...</p>`;
         
-        // Pagination (falls Playlist > 100 Songs) - hier vereinfacht nur die ersten 100
-        // Um API Limits zu schonen, laden wir hier nur die erste Seite.
-        const { data } = await axios.get(url, { headers: { Authorization: "Bearer " + accessToken } });
-        
-        songsDiv.innerHTML = `<p>Analysiere ${data.items.length} Songs... das dauert kurz wegen API Limits.</p><div id="grid-inner" class="song-grid"></div>`;
-        const grid = document.getElementById("grid-inner");
+        // Hole Tracks
+        const { data } = await axios.get(`${API_ENDPOINT}/playlists/${pid}/tracks`, { headers: { Authorization: "Bearer " + accessToken } });
+        box.innerHTML = "";
 
-        // Loop durch Tracks
         for (const item of data.items) {
             const t = item.track;
             if (!t) continue;
-
-            // UI Element erstellen (noch ohne Jahr)
+            
             const div = document.createElement("div");
             div.className = "song-card";
-            const yearId = `year-${t.id}`;
-            const spotifyYear = t.album.release_date?.slice(0,4) || "????";
+            const yearId = `y-${t.id}`;
+            const infoId = `i-${t.id}`;
             
+            // Spotify Jahr als Platzhalter
+            let spotifyYear = t.album.release_date.substring(0,4);
+
             div.innerHTML = `
-                <img src="${t.album.images[1]?.url || ''}" width="100" style="border-radius:4px; margin-bottom:5px;"><br>
+                <img src="${t.album.images[1]?.url||''}" width="80" style="border-radius:4px"><br>
                 <b>${t.name}</b><br>
                 <small>${t.artists[0].name}</small><br>
-                <div style="background:#222; padding:5px; margin:5px 0; border-radius:4px;">
-                    <span style="color:#888; font-size:0.8em">Spotify: ${spotifyYear}</span><br>
-                    <strong id="${yearId}" style="color:#1db954; font-size:1.2em">⏳</strong>
-                </div>
-                <canvas id="qr-${t.id}" style="margin-top:5px;"></canvas>
+                <span id="${yearId}" class="year-badge" style="color:#888;">${spotifyYear}</span>
+                <div id="${infoId}" class="source-badge">Spotify</div>
+                <canvas id="qr-${t.id}"></canvas>
             `;
-            grid.appendChild(div);
+            box.appendChild(div);
 
-            // QR Code sofort rendern
-            QRCode.toCanvas(document.getElementById(`qr-${t.id}`), t.external_urls.spotify, { 
-                width: 100, margin: 1, color: { dark: "#1db954", light: "#0000" } 
+            QRCode.toCanvas(document.getElementById(`qr-${t.id}`), t.external_urls.spotify, { width: 120, margin:1, color: {dark:"#1db954"} });
+
+            // ASYNC JAHR CHECKEN (Discogs)
+            // Wir machen das parallel zum UI-Rendering, aber mit Delay für Rate-Limits
+            // Discogs erlaubt ca 60 Requests pro Minute. Wir warten 1.1 Sekunden.
+            await new Promise(r => setTimeout(r, 1100)); 
+            
+            getDiscogsYear(t.artists[0].name, t.name).then(res => {
+                const el = document.getElementById(yearId);
+                const info = document.getElementById(infoId);
+                
+                if (res && res.year && res.year < spotifyYear) {
+                    // Wenn Discogs ein älteres Jahr findet -> BINGO
+                    el.textContent = res.year;
+                    el.style.color = "#ffcc00"; // Gold
+                    info.textContent = `Gefunden via ${res.source}`;
+                    info.style.color = "#ffcc00";
+                } else if (res && res.year === spotifyYear) {
+                    // Bestätigt
+                    el.style.color = "#fff";
+                    info.textContent = "Spotify & Discogs einig";
+                } else {
+                    // Nix besseres gefunden
+                    info.textContent = "Nur Spotify Datum";
+                }
             });
-
-            // --- DER TRICK: VERZÖGERTE ABFRAGE ---
-            // Wir warten 800ms zwischen jedem Song, um MusicBrainz nicht zu blockieren (Rate Limit: 1 Req/sec)
-            await new Promise(r => setTimeout(r, 800));
-
-            // Jahr holen
-            const realYear = await fetchBetterYear(t.artists[0].name, t.name, spotifyYear);
-            
-            const el = document.getElementById(yearId);
-            el.textContent = realYear;
-            
-            // Visuelles Feedback, wenn korrigiert wurde
-            if (realYear !== spotifyYear && realYear !== "????") {
-                el.textContent += " ✨"; // Sternchen für "Korrigiert"
-                el.style.color = "#ffcc00"; // Goldene Farbe
-            }
         }
-
-      } catch (err) {
-        songsDiv.innerHTML += `<p style="color:red">Fehler: ${err.message}</p>`;
-      }
-    }
-
-    function logout() {
-      localStorage.removeItem("spotify_token");
-      location.reload();
     }
 
     init();
