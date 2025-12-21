@@ -1,255 +1,142 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Hitster Web – Originaljahr</title>
-
-  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
-
-  <style>
-    body {
-      font-family: system-ui, sans-serif;
-      margin: 0;
-      background: #121212;
-      color: #fff;
-      padding: 20px;
-    }
-    h1 { text-align: center; color: #1db954; }
-    button {
-      background: #1db954;
-      border: none;
-      color: white;
-      padding: 10px 16px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-weight: bold;
-    }
-    button:hover { background: #1ed760; }
-    .playlist-grid, .song-grid {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-      justify-content: center;
-    }
-    .playlist-card, .song-card {
-      background: #181818;
-      border-radius: 10px;
-      padding: 15px;
-      width: 200px;
-      text-align: center;
-      box-shadow: 0 0 8px #000;
-    }
-    canvas { margin-top: 10px; }
-    #debug {
-      background: #000;
-      color: #0f0;
-      font-family: monospace;
-      padding: 10px;
-      border-radius: 8px;
-      margin-top: 20px;
-      white-space: pre-wrap;
-    }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Hitster Web – Originaljahr</title>
+<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+<style>
+body { font-family: system-ui, sans-serif; margin:0; background:#121212; color:#fff; padding:20px; }
+h1 { text-align:center; color:#1db954; }
+button { background:#1db954; border:none; color:white; padding:10px 16px; border-radius:6px; cursor:pointer; font-weight:bold; }
+button:hover { background:#1ed760; }
+.playlist-grid, .song-grid { display:flex; flex-wrap:wrap; gap:12px; justify-content:center; }
+.playlist-card, .song-card { background:#181818; border-radius:10px; padding:15px; width:200px; text-align:center; box-shadow:0 0 8px #000; }
+canvas { margin-top:10px; }
+#debug { background:#000; color:#0f0; font-family:monospace; padding:10px; border-radius:8px; margin-top:20px; white-space:pre-wrap; }
+</style>
 </head>
-
 <body>
-  <h1>🎶 Hitster Web – Originaljahr</h1>
-  <div id="app" style="text-align:center;"></div>
-  <div id="debug"></div>
+<h1>🎶 Hitster Web – Originaljahr</h1>
+<div id="app" style="text-align:center;"></div>
+<div id="debug"></div>
 
-  <script>
-    const CLIENT_ID = "ba3eba27da4948e7bcad1872acdc48ab";
-    const REDIRECT_URI = "https://hypercodestudios.github.io/hitster-web/";
-    const AUTH_ENDPOINT = "https://accounts.spotify.com/authorize";
-    const TOKEN_ENDPOINT = "https://accounts.spotify.com/api/token";
-    const SCOPES = "playlist-read-private playlist-read-collaborative";
+<script>
+const CLIENT_ID = "ba3eba27da4948e7bcad1872acdc48ab";
+const REDIRECT_URI = "https://hypercodestudios.github.io/hitster-web/";
+const AUTH_ENDPOINT = "https://accounts.spotify.com/authorize";
+const TOKEN_ENDPOINT = "https://accounts.spotify.com/api/token";
+const SCOPES = "playlist-read-private playlist-read-collaborative";
 
-    const app = document.getElementById("app");
-    const debug = document.getElementById("debug");
-    let accessToken = "";
+const app = document.getElementById("app");
+const debug = document.getElementById("debug");
+let accessToken = "";
 
-    function log(msg) {
-      console.log(msg);
-      debug.textContent += msg + "\n";
-    }
+function log(msg) { console.log(msg); debug.textContent += msg+"\n"; }
 
-    async function generateCodeVerifier(length = 128) {
-      let text = '';
-      const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-      for (let i = 0; i < length; i++) {
-        text += possible.charAt(Math.floor(Math.random() * possible.length));
-      }
-      return text;
-    }
+async function generateCodeVerifier(length=128){
+  let text=''; const possible='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  for(let i=0;i<length;i++){ text+=possible.charAt(Math.floor(Math.random()*possible.length)); }
+  return text;
+}
 
-    async function generateCodeChallenge(verifier) {
-      const encoder = new TextEncoder();
-      const data = encoder.encode(verifier);
-      const digest = await crypto.subtle.digest("SHA-256", data);
-      return btoa(String.fromCharCode(...new Uint8Array(digest)))
-        .replace(/\+/g, "-")
-        .replace(/\//g, "_")
-        .replace(/=+$/, "");
-    }
+async function generateCodeChallenge(verifier){
+  const encoder=new TextEncoder();
+  const data=encoder.encode(verifier);
+  const digest=await crypto.subtle.digest("SHA-256", data);
+  return btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+}
 
-    async function redirectToAuth() {
-      const verifier = await generateCodeVerifier();
-      const challenge = await generateCodeChallenge(verifier);
-      localStorage.setItem("verifier", verifier);
+async function redirectToAuth(){
+  const verifier=await generateCodeVerifier();
+  const challenge=await generateCodeChallenge(verifier);
+  localStorage.setItem("verifier",verifier);
+  const params=new URLSearchParams({response_type:"code",client_id:CLIENT_ID,scope:SCOPES,redirect_uri:REDIRECT_URI,code_challenge_method:"S256",code_challenge:challenge});
+  window.location=`${AUTH_ENDPOINT}?${params.toString()}`;
+}
 
-      const params = new URLSearchParams({
-        response_type: "code",
-        client_id: CLIENT_ID,
-        scope: SCOPES,
-        redirect_uri: REDIRECT_URI,
-        code_challenge_method: "S256",
-        code_challenge: challenge
-      });
+async function handleRedirectCallback(){
+  const params=new URLSearchParams(window.location.search);
+  const code=params.get("code");
+  const verifier=localStorage.getItem("verifier");
+  if(!code) return null;
+  const body=new URLSearchParams({client_id:CLIENT_ID,grant_type:"authorization_code",code,redirect_uri:REDIRECT_URI,code_verifier:verifier});
+  const res=await fetch(TOKEN_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body});
+  const data=await res.json();
+  if(data.access_token){ localStorage.setItem("spotify_token",data.access_token); window.history.replaceState({},document.title,REDIRECT_URI); return data.access_token; }
+  return null;
+}
 
-      window.location = `${AUTH_ENDPOINT}?${params.toString()}`;
-    }
+async function init(){
+  accessToken=localStorage.getItem("spotify_token");
+  if(!accessToken){ const t=await handleRedirectCallback(); if(t) accessToken=t; }
+  if(!accessToken){ app.innerHTML=`<button onclick="redirectToAuth()">Mit Spotify verbinden</button>`; return; }
+  showPlaylists();
+}
 
-    async function handleRedirectCallback() {
-      const params = new URLSearchParams(window.location.search);
-      const code = params.get("code");
-      const verifier = localStorage.getItem("verifier");
-      if (!code) return null;
+async function showPlaylists(){
+  app.innerHTML=`<button onclick="logout()">Logout</button><h2>Deine Playlists</h2><div id="playlists" class="playlist-grid">Lade...</div><div id="songs" class="song-grid"></div>`;
+  const {data}=await axios.get("https://api.spotify.com/v1/me/playlists",{headers:{Authorization:"Bearer "+accessToken}});
+  const container=document.getElementById("playlists"); container.innerHTML="";
+  data.items.forEach(p=>{
+    const div=document.createElement("div"); div.className="playlist-card";
+    div.innerHTML=`<img src="${p.images[0]?.url||''}" width="150" style="border-radius:6px"><br><b>${p.name}</b><br><br><button onclick="loadTracks('${p.id}')">Songs anzeigen</button>`;
+    container.appendChild(div);
+  });
+}
 
-      const body = new URLSearchParams({
-        client_id: CLIENT_ID,
-        grant_type: "authorization_code",
-        code,
-        redirect_uri: REDIRECT_URI,
-        code_verifier: verifier
-      });
+async function getOriginalYearByISRC(isrc){
+  if(!isrc) return null;
+  try{
+    const res=await fetch(`https://musicbrainz.org/ws/2/recording?query=isrc:${isrc}&fmt=json`,{headers:{"User-Agent":"HitsterWeb/1.0"}});
+    const data=await res.json(); if(!data.recordings) return null;
+    let years=[]; for(const r of data.recordings){ if(r["first-release-date"]){ const y=parseInt(r["first-release-date"].slice(0,4)); if(!isNaN(y)) years.push(y); } }
+    return years.length?Math.min(...years):null;
+  }catch{ return null; }
+}
 
-      const res = await fetch(TOKEN_ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body
-      });
+async function getYearFromWikipedia(title,artist){
+  const query=encodeURIComponent(`${title} ${artist}`);
+  try{
+    const searchRes=await fetch(`https://de.wikipedia.org/w/rest.php/v1/search/title?q=${query}&limit=1`);
+    const searchData=await searchRes.json();
+    if(!searchData.pages||!searchData.pages.length) return null;
+    const pageTitle=searchData.pages[0].title;
+    const pageRes=await fetch(`https://de.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(pageTitle)}`);
+    const pageData=await pageRes.json();
+    if(!pageData.extract) return null;
+    const matches=pageData.extract.match(/\b(19|20)\d{2}\b/g);
+    if(!matches) return null;
+    return Math.min(...matches.map(y=>parseInt(y)));
+  }catch{ return null; }
+}
 
-      const data = await res.json();
-      if (data.access_token) {
-        localStorage.setItem("spotify_token", data.access_token);
-        window.history.replaceState({}, document.title, REDIRECT_URI);
-        return data.access_token;
-      }
-      return null;
-    }
-
-    async function init() {
-      accessToken = localStorage.getItem("spotify_token");
-      if (!accessToken) {
-        const t = await handleRedirectCallback();
-        if (t) accessToken = t;
-      }
-      if (!accessToken) {
-        app.innerHTML = `<button onclick="redirectToAuth()">Mit Spotify verbinden</button>`;
-        return;
-      }
-      showPlaylists();
-    }
-
-    async function showPlaylists() {
-      app.innerHTML = `
-        <button onclick="logout()">Logout</button>
-        <h2>Deine Playlists</h2>
-        <div id="playlists" class="playlist-grid">Lade...</div>
-        <div id="songs" class="song-grid"></div>
-      `;
-
-      const { data } = await axios.get(
-        "https://api.spotify.com/v1/me/playlists",
-        { headers: { Authorization: "Bearer " + accessToken } }
-      );
-
-      const container = document.getElementById("playlists");
-      container.innerHTML = "";
-
-      data.items.forEach(p => {
-        const div = document.createElement("div");
-        div.className = "playlist-card";
-        div.innerHTML = `
-          <img src="${p.images[0]?.url || ''}" width="150" style="border-radius:6px"><br>
-          <b>${p.name}</b><br><br>
-          <button onclick="loadTracks('${p.id}')">Songs anzeigen</button>
-        `;
-        container.appendChild(div);
-      });
-    }
-
-    async function getOriginalYearByISRC(isrc) {
-      if (!isrc) return null;
-      try {
-        const res = await fetch(
-          `https://musicbrainz.org/ws/2/recording?query=isrc:${isrc}&fmt=json`,
-          { headers: { "User-Agent": "HitsterWeb/1.0" } }
-        );
-        const data = await res.json();
-        if (!data.recordings) return null;
-
-        let years = [];
-        for (const r of data.recordings) {
-          if (r["first-release-date"]) {
-            const y = parseInt(r["first-release-date"].slice(0,4));
-            if (!isNaN(y)) years.push(y);
-          }
-        }
-        return years.length ? Math.min(...years) : null;
-      } catch {
-        return null;
+async function loadTracks(playlistId){
+  const songsDiv=document.getElementById("songs"); songsDiv.innerHTML="Lade Songs...";
+  const {data}=await axios.get(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`,{headers:{Authorization:"Bearer "+accessToken}});
+  songsDiv.innerHTML="";
+  for(const item of data.items){
+    const t=item.track; if(!t) continue;
+    let year=t.album.release_date?.slice(0,4)||"";
+    if(t.external_ids?.isrc){
+      const mbYear=await getOriginalYearByISRC(t.external_ids.isrc);
+      if(mbYear) year=mbYear;
+      else{
+        const wikiYear=await getYearFromWikipedia(t.name,t.artists[0].name);
+        if(wikiYear) year=wikiYear;
       }
     }
+    const div=document.createElement("div"); div.className="song-card";
+    div.innerHTML=`<b>${t.name}</b><br><small>${t.artists[0].name}</small><br><small>Originaljahr: ${year}</small><br><canvas id="qr-${t.id}" width="100" height="100"></canvas>`;
+    songsDiv.appendChild(div);
+    QRCode.toCanvas(document.getElementById(`qr-${t.id}`),t.external_urls.spotify,{width:100,color:{dark:"#1db954",light:"#0000"}});
+  }
+}
 
-    async function loadTracks(playlistId) {
-      const songsDiv = document.getElementById("songs");
-      songsDiv.innerHTML = "Lade Songs...";
+function logout(){ localStorage.removeItem("spotify_token"); location.reload(); }
 
-      const { data } = await axios.get(
-        `https://api.spotify.com/v1/playlists/${playlistId}/tracks`,
-        { headers: { Authorization: "Bearer " + accessToken } }
-      );
-
-      songsDiv.innerHTML = "";
-
-      for (const item of data.items) {
-        const t = item.track;
-        if (!t) continue;
-
-        let year = t.album.release_date?.slice(0,4) || "";
-        if (t.external_ids?.isrc) {
-          const original = await getOriginalYearByISRC(t.external_ids.isrc);
-          if (original) year = original;
-        }
-
-        const div = document.createElement("div");
-        div.className = "song-card";
-        div.innerHTML = `
-          <b>${t.name}</b><br>
-          <small>${t.artists[0].name}</small><br>
-          <small>Originaljahr: ${year}</small><br>
-          <canvas id="qr-${t.id}" width="100" height="100"></canvas>
-        `;
-
-        songsDiv.appendChild(div);
-
-        QRCode.toCanvas(
-          document.getElementById(`qr-${t.id}`),
-          t.external_urls.spotify,
-          { width: 100, color: { dark: "#1db954", light: "#0000" } }
-        );
-      }
-    }
-
-    function logout() {
-      localStorage.removeItem("spotify_token");
-      location.reload();
-    }
-
-    init();
-  </script>
+init();
+</script>
 </body>
 </html>
