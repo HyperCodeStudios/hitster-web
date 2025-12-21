@@ -87,13 +87,6 @@
                     
                     // 1. Artist Match
                     if (isArtistMatch(artist, item.title)) {
-                        // 2. Plausibilitäts-Check:
-                        // Wenn Discogs mehr als 20 Jahre älter ist als Spotify, ist es bei 
-                        // modernen Künstlern (wie Cro) ein Fehler. Ausnahme: Sehr alte Spotify-Daten.
-                        if (sYearInt - dYearInt > 20 && sYearInt > 2000) {
-                            console.warn(`Überspringe ${item.year} für ${title} (Unplausibel zu Spotify ${spotifyYear})`);
-                            continue; 
-                        }
                         return { year: item.year, source: 'Discogs' };
                     }
                 }
