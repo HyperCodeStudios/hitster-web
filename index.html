@@ -24,18 +24,25 @@
   
   <script>
     // --- KONFIGURATION ---
-    const SPOTIFY_CLIENT_ID = "ba3eba27da4948e7bcad1872acdc48ab"; // Deine Spotify ID
+    const SPOTIFY_CLIENT_ID = "ba3eba27da4948e7bcad1872acdc48ab"; 
     
+    // 🔥 WICHTIG: Hier deinen Discogs Token einfügen!
     const DISCOGS_TOKEN = "wqMZDlzvFFtlVOnUskoEiDMMlHlBsUFdJVBthaqZ"; 
 
     const REDIRECT_URI = "https://hypercodestudios.github.io/hitster-web/";
     
-    // Spotify URLs (Korrekt)
     const AUTH_ENDPOINT = "https://accounts.spotify.com/authorize";
     const TOKEN_ENDPOINT = "https://accounts.spotify.com/api/token";
     const API_ENDPOINT = "https://api.spotify.com/v1";
 
     let accessToken = localStorage.getItem("spotify_token");
+
+    // --- HELPER: TEXT NORMALISIEREN ---
+    // Entfernt Sonderzeichen und macht alles klein für besseren Vergleich
+    function normalize(str) {
+        if (!str) return "";
+        return str.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim();
+    }
 
     // --- HELPER: TITEL BEREINIGEN ---
     function cleanTitle(title) {
@@ -47,48 +54,78 @@
             .replace(/\s*-\s*live.*/i, '')
             .replace(/\s*\(.*live.*\)/i, '')
             .replace(/\s*feat\..*/i, '')
-            .replace(/\s*\/.*$/, '') // Entfernt alles nach einem Slash
+            .replace(/\s*\/.*$/, '') 
             .trim();
+    }
+
+    // --- NEU: KÜNSTLER CHECK ---
+    function isArtistMatch(spotifyArtist, discogsResultTitle) {
+        // Discogs liefert Titel oft im Format: "Artist - AlbumName"
+        // Wir prüfen, ob der Spotify Artist Name im Discogs String vorkommt.
+        const sArtist = normalize(spotifyArtist);
+        const dTitle = normalize(discogsResultTitle);
+
+        // Sicherheitscheck: Ist der Artist Name sehr kurz (z.B. "U2" oder "M"), 
+        // müssen wir vorsichtig sein, sonst matched "M" auf alles.
+        if (sArtist.length <= 2) {
+             // Bei sehr kurzen Namen muss er am Anfang stehen und gefolgt von Leerzeichen sein
+             return dTitle.startsWith(sArtist + " ");
+        }
+
+        return dTitle.includes(sArtist);
     }
 
     // --- HELPER: DISCOGS API ---
     async function getDiscogsYear(artist, title) {
-        if (!DISCOGS_TOKEN || DISCOGS_TOKEN === "HIER_DEINEN_DISCOGS_TOKEN_EINFÜGEN") return null;
+        if (!DISCOGS_TOKEN || DISCOGS_TOKEN.includes("HIER_DEINEN")) return null;
 
         const clean = cleanTitle(title);
+        // Suche gezielt nach "Artist - Title"
         const query = `${artist} - ${clean}`;
         
-        // Wir suchen nach "Master" Releases und sortieren nach Jahr aufsteigend
-        // Das liefert meistens das absolut erste Vorkommen.
+        // Parameter:
+        // type=master: Wir bevorzugen Haupt-Releases (Alben/Singles)
+        // sort=year, asc: Wir wollen das ÄLTESTE
         const url = `https://api.discogs.com/database/search?q=${encodeURIComponent(query)}&type=master&sort=year&sort_order=asc&token=${DISCOGS_TOKEN}`;
 
         try {
             const res = await axios.get(url);
-            const items = res.data.results;
+            let items = res.data.results;
 
-            // Suche das erste gültige Jahr (4 Ziffern)
-            const validItem = items.find(i => i.year && i.year.match(/^\d{4}$/));
+            // FILTEUNG: Wir gehen die Liste durch und nehmen das ERSTE Ergebnis,
+            // das ein gültiges Jahr hat UND wo der Artist übereinstimmt.
+            let validItem = items.find(i => 
+                i.year && 
+                i.year.match(/^\d{4}$/) && 
+                isArtistMatch(artist, i.title) // <--- Der wichtige Fix!
+            );
             
             if (validItem) {
-                return { year: validItem.year, source: 'Discogs' };
+                return { year: validItem.year, source: 'Discogs (Master)' };
             }
 
-            // Fallback: Wenn kein "Master" gefunden wurde, suchen wir nach normalen Releases (Singles etc.)
+            // FALLBACK: Wenn kein "Master" gefunden, suche nach "Release" (z.B. Singles)
+            // Das ist oft nötig bei One-Hit-Wonders oder deutschen Schlagern
             const urlRelease = `https://api.discogs.com/database/search?q=${encodeURIComponent(query)}&type=release&sort=year&sort_order=asc&token=${DISCOGS_TOKEN}`;
             const resRel = await axios.get(urlRelease);
-            const validRelease = resRel.data.results.find(i => i.year && i.year.match(/^\d{4}$/));
+            
+            let validRelease = resRel.data.results.find(i => 
+                i.year && 
+                i.year.match(/^\d{4}$/) && 
+                isArtistMatch(artist, i.title) // <--- Auch hier prüfen!
+            );
             
             if (validRelease) {
-                return { year: validRelease.year, source: 'Discogs (Rel)' };
+                return { year: validRelease.year, source: 'Discogs (Release)' };
             }
 
         } catch (e) {
             console.warn("Discogs Error:", e);
         }
-        return null;
+        return null; // Nichts gefunden oder Artist passte nicht
     }
 
-    // --- AUTH FLOW ---
+    // --- AUTH FLOW (Unverändert) ---
     async function generateCodeVerifier(len=128) {
         const arr = new Uint8Array(len);
         window.crypto.getRandomValues(arr);
@@ -165,7 +202,6 @@
             const yearId = `y-${t.id}`;
             const infoId = `i-${t.id}`;
             
-            // Spotify Jahr als Platzhalter
             let spotifyYear = t.album.release_date.substring(0,4);
 
             div.innerHTML = `
@@ -180,28 +216,33 @@
 
             QRCode.toCanvas(document.getElementById(`qr-${t.id}`), t.external_urls.spotify, { width: 120, margin:1, color: {dark:"#1db954"} });
 
-            // ASYNC JAHR CHECKEN (Discogs)
-            // Wir machen das parallel zum UI-Rendering, aber mit Delay für Rate-Limits
-            // Discogs erlaubt ca 60 Requests pro Minute. Wir warten 1.1 Sekunden.
+            // DELAY
             await new Promise(r => setTimeout(r, 1100)); 
             
+            // NEUE LOGIK: Wenn Discogs Artist Match fehlschlägt, kommt null zurück
             getDiscogsYear(t.artists[0].name, t.name).then(res => {
                 const el = document.getElementById(yearId);
                 const info = document.getElementById(infoId);
                 
-                if (res && res.year && res.year < spotifyYear) {
-                    // Wenn Discogs ein älteres Jahr findet -> BINGO
-                    el.textContent = res.year;
-                    el.style.color = "#ffcc00"; // Gold
-                    info.textContent = `Gefunden via ${res.source}`;
-                    info.style.color = "#ffcc00";
-                } else if (res && res.year === spotifyYear) {
-                    // Bestätigt
-                    el.style.color = "#fff";
-                    info.textContent = "Spotify & Discogs einig";
+                if (res && res.year) {
+                    // Logic: Wenn Discogs Jahr existiert, nehmen wir es.
+                    // AUSSER: Es ist deutlich älter als Spotify (z.B. >50 Jahre Differenz und Spotify ist neu), 
+                    // dann könnte es immer noch ein Fehler sein, aber der Artist-Check sollte das abfangen.
+                    
+                    // Wir vertrauen dem Artist-Check jetzt:
+                    if (res.year !== spotifyYear) {
+                         el.textContent = res.year;
+                         el.style.color = "#ffcc00"; 
+                         info.textContent = `Via ${res.source}`;
+                         info.style.color = "#ffcc00";
+                    } else {
+                         el.style.color = "#fff";
+                         info.textContent = "Bestätigt (Discogs)";
+                    }
                 } else {
-                    // Nix besseres gefunden
-                    info.textContent = "Nur Spotify Datum";
+                    // Discogs hat nichts passendes gefunden (Artist mismatch oder kein Eintrag)
+                    // Wir bleiben beim Spotify Datum
+                    info.textContent = "Kein Match in DB";
                 }
             });
         }
