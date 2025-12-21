@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Hitster Player</title>
+    <style>
+        body { background: #121212; color: white; text-align: center; font-family: sans-serif; display: flex; flex-direction: column; justify-content: center; height: 100vh; margin: 0; }
+        .btn { background: #1db954; color: white; padding: 20px; border-radius: 50px; font-size: 1.5rem; border: none; cursor: pointer; }
+        #status { margin-top: 20px; color: #888; }
+    </style>
+</head>
+<body>
+    <h1>Bereit zum Spielen?</h1>
+    <button class="btn" id="playBtn">🎵 Musik abspielen</button>
+    <div id="status">Warte auf Scan...</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        const trackId = params.get('id');
+        const token = localStorage.getItem("spotify_token"); // Muss vorher eingeloggt sein
+
+        document.getElementById('playBtn').onclick = async () => {
+            if (!token) {
+                alert("Bitte logge dich zuerst auf der Hauptseite bei Spotify ein!");
+                return;
+            }
+
+            try {
+                // Spotify API Befehl zum Abspielen
+                await axios.put(`https://api.spotify.com/v1/me/player/play`, 
+                { uris: [`spotify:track:${trackId}`] },
+                { headers: { Authorization: `Bearer ${token}` } });
+                
+                document.getElementById('status').textContent = "Lied läuft...";
+            } catch (err) {
+                console.error(err);
+                document.getElementById('status').textContent = "Fehler: Öffne Spotify auf deinem Handy!";
+            }
+        };
+    </script>
+</body>
+</html>
