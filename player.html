@@ -18,24 +18,36 @@
     <script>
         const params = new URLSearchParams(window.location.search);
         const trackId = params.get('id');
-        const token = localStorage.getItem("spotify_token"); // Muss vorher eingeloggt sein
+        // WICHTIG: Prüfen, ob der Token wirklich da ist
+        const token = localStorage.getItem("spotify_token"); 
 
         document.getElementById('playBtn').onclick = async () => {
             if (!token) {
-                alert("Bitte logge dich zuerst auf der Hauptseite bei Spotify ein!");
+                console.error("Kein Token im LocalStorage gefunden!");
+                alert("Bitte logge dich auf der Hauptseite ein.");
                 return;
             }
 
             try {
-                // Spotify API Befehl zum Abspielen
-                await axios.put(`https://api.spotify.com/v1/me/player/play`, 
-                { uris: [`spotify:track:${trackId}`] },
-                { headers: { Authorization: `Bearer ${token}` } });
-                
-                document.getElementById('status').textContent = "Lied läuft...";
+                await axios({
+                    method: 'put',
+                    url: 'https://api.spotify.com/v1/me/player/play', // Nutze die echte URL zum Testen
+                    data: { uris: [`spotify:track:${trackId}`] },
+                    headers: { 
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                document.getElementById('status').textContent = "Lied läuft!";
             } catch (err) {
-                console.error(err);
-                document.getElementById('status').textContent = "Fehler: Öffne Spotify auf deinem Handy!";
+                console.error("API Fehler Details:", err.response ? err.response.data : err);
+                if(err.response && err.response.status === 404) {
+                    alert("Kein aktives Spotify-Gerät gefunden! Öffne Spotify auf deinem Handy und spiele kurz ein Lied ab.");
+                } else if(err.response && err.response.status === 403) {
+                    alert("Spotify Premium erforderlich für API-Steuerung.");
+                } else {
+                    alert("Fehler: " + err.message);
+                }
             }
         };
     </script>
