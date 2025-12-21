@@ -106,7 +106,7 @@
         
         const params = new URLSearchParams({
             client_id: SPOTIFY_CLIENT_ID, response_type: "code", redirect_uri: REDIRECT_URI,
-            scope: "playlist-read-private", code_challenge_method: "S256", code_challenge: challenge
+            scope: "playlist-read-private playlist-read-collaborative user-modify-playback-state user-read-playback-state", code_challenge_method: "S256", code_challenge: challenge
         });
         window.location = `${AUTH_ENDPOINT}?${params}`;
     }
