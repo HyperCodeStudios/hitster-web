@@ -40,8 +40,9 @@
   <div id="debug"></div>
 
   <script>
-    const CLIENT_ID = "ba3eba27da4948e7bcad1872acdc48ab"; // deine Spotify Client ID
+    const CLIENT_ID = "ba3eba27da4948e7bcad1872acdc48ab"; // Deine ID
     const REDIRECT_URI = "https://hypercodestudios.github.io/hitster-web/";
+    // HINWEIS: Hier die korrekten Spotify Endpoints nutzen
     const AUTH_ENDPOINT = "https://accounts.spotify.com/authorize";
     const TOKEN_ENDPOINT = "https://accounts.spotify.com/api/token";
     const SCOPES = "playlist-read-private playlist-read-collaborative";
@@ -52,9 +53,11 @@
 
     function log(msg) {
       console.log(msg);
-      debug.textContent += msg + "\n";
+      // Optional: Debug Text kurz halten oder ausblenden, wenn es zu viel wird
+      // debug.textContent += msg + "\n"; 
     }
 
+    // --- PKCE AUTH FLOW --- (Unverändert)
     async function generateCodeVerifier(length = 128) {
       let text = '';
       const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -69,9 +72,7 @@
       const data = encoder.encode(verifier);
       const digest = await window.crypto.subtle.digest('SHA-256', data);
       return btoa(String.fromCharCode(...new Uint8Array(digest)))
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=+$/, '');
+        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     }
 
     async function redirectToAuth() {
@@ -87,10 +88,7 @@
         code_challenge_method: "S256",
         code_challenge: challenge
       });
-
-      const authUrl = `${AUTH_ENDPOINT}?${params.toString()}`;
-      log("🔗 Redirecting to: " + authUrl);
-      window.location = authUrl;
+      window.location = `${AUTH_ENDPOINT}?${params.toString()}`;
     }
 
     async function handleRedirectCallback() {
@@ -99,7 +97,9 @@
       const verifier = localStorage.getItem("verifier");
 
       if (!code) return null;
-      log("📩 Authorization code erhalten.");
+      
+      // URL säubern
+      window.history.replaceState({}, document.title, REDIRECT_URI);
 
       const body = new URLSearchParams({
         client_id: CLIENT_ID,
@@ -117,22 +117,96 @@
         });
         const data = await response.json();
         if (data.access_token) {
-          log("✅ Access Token erfolgreich erhalten.");
           localStorage.setItem("spotify_token", data.access_token);
-          window.history.replaceState({}, document.title, REDIRECT_URI);
           return data.access_token;
-        } else {
-          log("❌ Fehler beim Abrufen des Tokens: " + JSON.stringify(data));
-          return null;
         }
       } catch (err) {
-        log("Fehler beim Token-Abruf: " + err);
-        return null;
+        log("Fehler Token: " + err);
       }
+      return null;
     }
 
+    // --- LOGIC: ORIGINAL JAHR FINDEN ---
+
+    // 1. Titel bereinigen (Wichtig für deutsche Schlager/Pop!)
+    // Entfernt: " - Remastered 2011", "(Live)", "feat. X", "Radio Edit"
+    function cleanTrackTitle(title) {
+        return title
+            .replace(/\s*-\s*.*remaster.*/i, '') 
+            .replace(/\s*\(.*remaster.*\)/i, '')
+            .replace(/\s*-\s*.*stereo.*/i, '')
+            .replace(/\s*-\s*radio\s*edit.*/i, '')
+            .replace(/\s*\(.*radio\s*edit.*\)/i, '')
+            .replace(/\s*-\s*live.*/i, '')
+            .replace(/\s*\(.*live.*\)/i, '')
+            .replace(/\s*feat\..*/i, '') // Features entfernen für bessere Trefferquote
+            .trim();
+    }
+
+    // 2. MusicBrainz API Abfrage (Search statt ISRC)
+    async function fetchBetterYear(artist, title, spotifyYear) {
+        const cleanTitle = cleanTrackTitle(title);
+        const query = `artist:"${artist}" AND recording:"${cleanTitle}"`;
+        const encodedQuery = encodeURIComponent(query);
+        
+        // Wir suchen nach Recordings, wollen aber die Release-Groups
+        const url = `https://musicbrainz.org/ws/2/recording/?query=${encodedQuery}&fmt=json&limit=3`;
+
+        try {
+            const response = await axios.get(url);
+            const recordings = response.data.recordings;
+
+            if (!recordings || recordings.length === 0) {
+                return spotifyYear; // Kein Treffer -> Fallback
+            }
+
+            // Wir sammeln alle "first-release-dates" der gefundenen Release-Groups
+            let possibleYears = [];
+
+            recordings.forEach(rec => {
+                if (rec["release-groups"]) {
+                    rec["release-groups"].forEach(rg => {
+                        if (rg["first-release-date"]) {
+                            possibleYears.push(rg["first-release-date"].substring(0, 4));
+                        }
+                    });
+                }
+                // Fallback: Releases direkt prüfen, falls keine Group
+                if (rec.releases) {
+                     rec.releases.forEach(rel => {
+                        if (rel.date) possibleYears.push(rel.date.substring(0, 4));
+                     });
+                }
+            });
+
+            // Filtern: Nur valide Jahre (4 Ziffern)
+            possibleYears = possibleYears.filter(y => y && y.match(/^\d{4}$/)).sort();
+
+            // Das ALLERERSTE gefundene Jahr nehmen
+            if (possibleYears.length > 0) {
+                const bestYear = possibleYears[0];
+                // Sicherheitscheck: Wenn MusicBrainz sagt 1920 für einen Techno Song, ist was faul.
+                // Aber wir vertrauen hier mal der DB.
+                
+                // Extra Logik: Wenn MusicBrainz neuer ist als Spotify, behalte Spotify (selten, aber möglich)
+                if (parseInt(bestYear) > parseInt(spotifyYear) && spotifyYear !== "????") {
+                    return spotifyYear; 
+                }
+                return bestYear;
+            }
+
+        } catch (e) {
+            console.warn("MusicBrainz Error für " + title, e);
+        }
+        
+        return spotifyYear;
+    }
+
+
+    // --- APP LOGIK ---
+
     async function init() {
-      log("🚀 Starte Hitster Web (PKCE Mode)");
+      log("🚀 Starte Hitster Web");
       accessToken = localStorage.getItem("spotify_token");
       if (!accessToken) {
         const newToken = await handleRedirectCallback();
@@ -143,7 +217,6 @@
         app.innerHTML = `<button onclick="redirectToAuth()">Mit Spotify verbinden</button>`;
         return;
       }
-
       showPlaylists();
     }
 
@@ -158,7 +231,6 @@
         const { data } = await axios.get("https://api.spotify.com/v1/me/playlists", {
           headers: { Authorization: "Bearer " + accessToken },
         });
-        log("✅ Playlists geladen: " + data.items.length);
         const container = document.getElementById("playlists");
         container.innerHTML = "";
         data.items.forEach(p => {
@@ -167,102 +239,83 @@
           div.innerHTML = `
             <img src="${p.images[0]?.url || ''}" width="150" style="border-radius:6px"><br>
             <b>${p.name}</b><br>
-            <button onclick="loadTracks('${p.id}')">Songs anzeigen</button>
+            <button onclick="loadTracks('${p.id}')">Songs laden</button>
           `;
           container.appendChild(div);
         });
       } catch (err) {
-        log("Fehler beim Laden der Playlists: " + err);
-        app.innerHTML = `<p>Fehler: ${err.message}</p><button onclick="logout()">Neu einloggen</button>`;
+        app.innerHTML = `<p>Fehler (Session abgelaufen?): ${err.message}</p><button onclick="logout()">Neu einloggen</button>`;
       }
     }
 
-  // HILFSFUNKTION: MusicBrainz Abfrage via ISRC
-  async function getOriginalYear(isrc, fallbackYear) {
-    if (!isrc) return fallbackYear;
-    
-    try {
-      // Suche in MusicBrainz nach dem ISRC
-      const url = `https://musicbrainz.org/ws/2/recording/?query=isrc:${isrc}&fmt=json`;
-      const response = await axios.get(url);
-      const recordings = response.data.recordings;
-
-      if (recordings && recordings.length > 0) {
-        // Wir suchen das früheste Release-Datum in allen verknüpften Releases
-        let earliestDate = fallbackYear;
-        
-        recordings.forEach(rec => {
-          if (rec.releases) {
-            rec.releases.forEach(rel => {
-              if (rel.date) {
-                const year = rel.date.slice(0, 4);
-                if (year < earliestDate) earliestDate = year;
-              }
-            });
-          }
-        });
-        return earliestDate;
-      }
-    } catch (err) {
-      console.error("MusicBrainz Error:", err);
-    }
-    return fallbackYear;
-  }
-
-  // ANGEPASSTE loadTracks FUNKTION
-  async function loadTracks(playlistId) {
-    const songsDiv = document.getElementById("songs");
-    songsDiv.innerHTML = "Lade Songs und suche Originaldaten...";
-    try {
-      // Spotify liefert ISRC nur, wenn man die Tracks explizit anfragt
-      const { data } = await axios.get(`https://api.spotify.com/v1/playlists/${playlistId}/tracks?fields=items(track(id,name,external_urls,external_ids,artists,album(release_date)))`, {
-        headers: { Authorization: "Bearer " + accessToken },
-      });
+    async function loadTracks(playlistId) {
+      const songsDiv = document.getElementById("songs");
+      songsDiv.innerHTML = "Lade Songs aus Spotify...";
       
-      songsDiv.innerHTML = "";
-      for (const item of data.items) {
-        const t = item.track;
-        if (!t) continue;
-
-        const spotifyYear = t.album.release_date?.slice(0, 4) || "????";
-        const isrc = t.external_ids?.isrc;
+      try {
+        let allTracks = [];
+        let url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?fields=next,items(track(id,name,external_urls,artists,album(release_date,images)))`;
         
-        // UI Platzhalter erstellen
-        const div = document.createElement("div");
-        div.className = "song-card";
-        const yearId = `year-${t.id}`;
-        div.innerHTML = `
-          <b>${t.name}</b><br>
-          <small>${t.artists[0].name}</small><br>
-          <strong id="${yearId}" style="color:#1db954;">Suche Jahr...</strong><br>
-          <canvas id="qr-${t.id}" width="100" height="100"></canvas>
-        `;
-        songsDiv.appendChild(div);
-
-        // QR Code generieren
-        QRCode.toCanvas(
-          document.getElementById(`qr-${t.id}`),
-          t.external_urls.spotify,
-          { width: 100, color: { dark: "#1db954", light: "#0000" } }
-        );
-
-        // Zeitversetzte Abfrage (Rate Limiting MusicBrainz)
-        // Wir rufen das Jahr asynchron ab, damit die UI nicht blockiert
-        getOriginalYear(isrc, spotifyYear).then(exactYear => {
-          document.getElementById(yearId).textContent = exactYear;
-        });
+        // Pagination (falls Playlist > 100 Songs) - hier vereinfacht nur die ersten 100
+        // Um API Limits zu schonen, laden wir hier nur die erste Seite.
+        const { data } = await axios.get(url, { headers: { Authorization: "Bearer " + accessToken } });
         
-        // Kleiner Delay, um MusicBrainz nicht zu überlasten (1 Req/sec empfohlen)
-        await new Promise(resolve => setTimeout(resolve, 500));
+        songsDiv.innerHTML = `<p>Analysiere ${data.items.length} Songs... das dauert kurz wegen API Limits.</p><div id="grid-inner" class="song-grid"></div>`;
+        const grid = document.getElementById("grid-inner");
+
+        // Loop durch Tracks
+        for (const item of data.items) {
+            const t = item.track;
+            if (!t) continue;
+
+            // UI Element erstellen (noch ohne Jahr)
+            const div = document.createElement("div");
+            div.className = "song-card";
+            const yearId = `year-${t.id}`;
+            const spotifyYear = t.album.release_date?.slice(0,4) || "????";
+            
+            div.innerHTML = `
+                <img src="${t.album.images[1]?.url || ''}" width="100" style="border-radius:4px; margin-bottom:5px;"><br>
+                <b>${t.name}</b><br>
+                <small>${t.artists[0].name}</small><br>
+                <div style="background:#222; padding:5px; margin:5px 0; border-radius:4px;">
+                    <span style="color:#888; font-size:0.8em">Spotify: ${spotifyYear}</span><br>
+                    <strong id="${yearId}" style="color:#1db954; font-size:1.2em">⏳</strong>
+                </div>
+                <canvas id="qr-${t.id}" style="margin-top:5px;"></canvas>
+            `;
+            grid.appendChild(div);
+
+            // QR Code sofort rendern
+            QRCode.toCanvas(document.getElementById(`qr-${t.id}`), t.external_urls.spotify, { 
+                width: 100, margin: 1, color: { dark: "#1db954", light: "#0000" } 
+            });
+
+            // --- DER TRICK: VERZÖGERTE ABFRAGE ---
+            // Wir warten 800ms zwischen jedem Song, um MusicBrainz nicht zu blockieren (Rate Limit: 1 Req/sec)
+            await new Promise(r => setTimeout(r, 800));
+
+            // Jahr holen
+            const realYear = await fetchBetterYear(t.artists[0].name, t.name, spotifyYear);
+            
+            const el = document.getElementById(yearId);
+            el.textContent = realYear;
+            
+            // Visuelles Feedback, wenn korrigiert wurde
+            if (realYear !== spotifyYear && realYear !== "????") {
+                el.textContent += " ✨"; // Sternchen für "Korrigiert"
+                el.style.color = "#ffcc00"; // Goldene Farbe
+            }
+        }
+
+      } catch (err) {
+        songsDiv.innerHTML += `<p style="color:red">Fehler: ${err.message}</p>`;
       }
-    } catch (err) {
-      songsDiv.innerHTML = `<p>Fehler beim Laden: ${err.message}</p>`;
     }
-  }
 
     function logout() {
       localStorage.removeItem("spotify_token");
-      app.innerHTML = `<button onclick="redirectToAuth()">Mit Spotify verbinden</button>`;
+      location.reload();
     }
 
     init();
