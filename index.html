@@ -91,17 +91,41 @@
         }
     }
 
+    // --- NEU: LOGOUT FUNKTION ---
+    function logout() {
+        localStorage.removeItem("spotify_token");
+        localStorage.removeItem("verifier");
+        window.location.href = REDIRECT_URI; // Seite neu laden ohne Parameter
+    }
+
+    // --- VERBESSERTE INIT FUNKTION ---
     async function init() {
         if (!accessToken) await handleCallback();
         accessToken = localStorage.getItem("spotify_token");
 
         if (!accessToken) {
             document.getElementById('login-section').style.display = 'block';
+            document.getElementById('player-section').style.display = 'none';
         } else {
-            document.getElementById('player-section').style.display = 'block';
-            if (trackId) {
-                document.getElementById('playBtn').disabled = false;
-                document.getElementById('message').textContent = "Karte erkannt! Klicke auf Play.";
+            // PRÜFUNG: Ist der Token noch gültig?
+            try {
+                // Wir fragen einfach das Profil ab - wenn das klappt, ist der Token okay
+                await axios.get('https://api.spotify.com/v1/me', {
+                    headers: { 'Authorization': `Bearer ${accessToken}` }
+                });
+                
+                // Alles okay -> Player zeigen
+                document.getElementById('player-section').style.display = 'block';
+                document.getElementById('login-section').style.display = 'none';
+                
+                if (trackId) {
+                    document.getElementById('playBtn').disabled = false;
+                    document.getElementById('message').textContent = "Karte erkannt! Klicke auf Play.";
+                }
+            } catch (err) {
+                // Token ist abgelaufen (Error 401)
+                console.warn("Sitzung abgelaufen, logge aus...");
+                logout(); 
             }
         }
     }
