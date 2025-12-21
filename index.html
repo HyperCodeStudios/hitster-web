@@ -13,24 +13,24 @@
     button:hover { background: #1ed760; }
     .playlist-grid, .song-grid { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
     .playlist-card, .song-card { background: #181818; border-radius: 10px; padding: 15px; width: 200px; text-align: center; box-shadow: 0 0 8px #000; position: relative; }
-    .year-badge { font-size: 1.4em; font-weight: bold; margin: 10px 0; display: block; }
-    .source-badge { font-size: 0.7em; opacity: 0.7; }
-    canvas { margin-top: 10px; border-radius: 4px; }
+    .year-badge { font-size: 1.6em; font-weight: bold; margin: 10px 0; display: block; transition: all 0.3s; }
+    .source-badge { font-size: 0.7em; opacity: 0.7; min-height: 15px; }
+    canvas { margin-top: 10px; border-radius: 4px; background: white; padding: 5px; }
+    small { color: #aaa; }
   </style>
 </head>
 <body>
-  <h1>🎶 Hitster Web (Discogs Powered)</h1>
+  <h1>🎶 Hitster Web</h1>
   <div id="app" style="text-align:center;"></div>
   
   <script>
     // --- KONFIGURATION ---
     const SPOTIFY_CLIENT_ID = "ba3eba27da4948e7bcad1872acdc48ab"; 
     
-    // 🔥 WICHTIG: Hier deinen Discogs Token einfügen!
-    const DISCOGS_TOKEN = "wqMZDlzvFFtlVOnUskoEiDMMlHlBsUFdJVBthaqZ"; 
+    // 🔥 DEIN DISCOGS TOKEN HIER EINTRAGEN:
+    const DISCOGS_TOKEN = "HIER_DEINEN_DISCOGS_TOKEN_EINFÜGEN"; 
 
     const REDIRECT_URI = "https://hypercodestudios.github.io/hitster-web/";
-    
     const AUTH_ENDPOINT = "https://accounts.spotify.com/authorize";
     const TOKEN_ENDPOINT = "https://accounts.spotify.com/api/token";
     const API_ENDPOINT = "https://api.spotify.com/v1";
@@ -38,7 +38,6 @@
     let accessToken = localStorage.getItem("spotify_token");
 
     // --- HELPER: TEXT NORMALISIEREN ---
-    // Entfernt Sonderzeichen und macht alles klein für besseren Vergleich
     function normalize(str) {
         if (!str) return "";
         return str.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim();
@@ -58,92 +57,63 @@
             .trim();
     }
 
-    // --- NEU: KÜNSTLER CHECK ---
+    // --- VERBESSERTER KÜNSTLER CHECK (Regex verhindert Fehlmatch bei kurzen Namen) ---
     function isArtistMatch(spotifyArtist, discogsResultTitle) {
-        // Discogs liefert Titel oft im Format: "Artist - AlbumName"
-        // Wir prüfen, ob der Spotify Artist Name im Discogs String vorkommt.
         const sArtist = normalize(spotifyArtist);
         const dTitle = normalize(discogsResultTitle);
-
-        // Sicherheitscheck: Ist der Artist Name sehr kurz (z.B. "U2" oder "M"), 
-        // müssen wir vorsichtig sein, sonst matched "M" auf alles.
-        if (sArtist.length <= 2) {
-             // Bei sehr kurzen Namen muss er am Anfang stehen und gefolgt von Leerzeichen sein
-             return dTitle.startsWith(sArtist + " ");
-        }
-
-        return dTitle.includes(sArtist);
+        // Prüft, ob der Künstlername als eigenständiges Wort vorkommt
+        const regex = new RegExp(`\\b${sArtist}\\b`, 'i');
+        return regex.test(dTitle);
     }
 
-    // --- HELPER: DISCOGS API ---
-    async function getDiscogsYear(artist, title) {
+    // --- DISCOGS API MIT PLAUSIBILITÄTS-CHECK ---
+    async function getDiscogsYear(artist, title, spotifyYear) {
         if (!DISCOGS_TOKEN || DISCOGS_TOKEN.includes("HIER_DEINEN")) return null;
 
         const clean = cleanTitle(title);
-        // Suche gezielt nach "Artist - Title"
         const query = `${artist} - ${clean}`;
+        const sYearInt = parseInt(spotifyYear);
         
-        // Parameter:
-        // type=master: Wir bevorzugen Haupt-Releases (Alben/Singles)
-        // sort=year, asc: Wir wollen das ÄLTESTE
+        // Suche nach Master-Releases (älteste zuerst)
         const url = `https://api.discogs.com/database/search?q=${encodeURIComponent(query)}&type=master&sort=year&sort_order=asc&token=${DISCOGS_TOKEN}`;
 
         try {
             const res = await axios.get(url);
-            let items = res.data.results;
+            const items = res.data.results;
 
-            // FILTEUNG: Wir gehen die Liste durch und nehmen das ERSTE Ergebnis,
-            // das ein gültiges Jahr hat UND wo der Artist übereinstimmt.
-            let validItem = items.find(i => 
-                i.year && 
-                i.year.match(/^\d{4}$/) && 
-                isArtistMatch(artist, i.title) // <--- Der wichtige Fix!
-            );
-            
-            if (validItem) {
-                return { year: validItem.year, source: 'Discogs (Master)' };
+            for (let item of items) {
+                if (item.year && item.year.match(/^\d{4}$/)) {
+                    const dYearInt = parseInt(item.year);
+                    
+                    // 1. Artist Match
+                    if (isArtistMatch(artist, item.title)) {
+                        // 2. Plausibilitäts-Check:
+                        // Wenn Discogs mehr als 20 Jahre älter ist als Spotify, ist es bei 
+                        // modernen Künstlern (wie Cro) ein Fehler. Ausnahme: Sehr alte Spotify-Daten.
+                        if (sYearInt - dYearInt > 20 && sYearInt > 2000) {
+                            console.warn(`Überspringe ${item.year} für ${title} (Unplausibel zu Spotify ${spotifyYear})`);
+                            continue; 
+                        }
+                        return { year: item.year, source: 'Discogs' };
+                    }
+                }
             }
-
-            // FALLBACK: Wenn kein "Master" gefunden, suche nach "Release" (z.B. Singles)
-            // Das ist oft nötig bei One-Hit-Wonders oder deutschen Schlagern
-            const urlRelease = `https://api.discogs.com/database/search?q=${encodeURIComponent(query)}&type=release&sort=year&sort_order=asc&token=${DISCOGS_TOKEN}`;
-            const resRel = await axios.get(urlRelease);
-            
-            let validRelease = resRel.data.results.find(i => 
-                i.year && 
-                i.year.match(/^\d{4}$/) && 
-                isArtistMatch(artist, i.title) // <--- Auch hier prüfen!
-            );
-            
-            if (validRelease) {
-                return { year: validRelease.year, source: 'Discogs (Release)' };
-            }
-
-        } catch (e) {
-            console.warn("Discogs Error:", e);
-        }
-        return null; // Nichts gefunden oder Artist passte nicht
+        } catch (e) { console.error("Discogs API Error", e); }
+        return null;
     }
 
-    // --- AUTH FLOW (Unverändert) ---
-    async function generateCodeVerifier(len=128) {
-        const arr = new Uint8Array(len);
-        window.crypto.getRandomValues(arr);
-        return btoa(String.fromCharCode(...arr)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'').substring(0,len);
-    }
-    async function generateCodeChallenge(v) {
-        const enc = new TextEncoder().encode(v);
-        const digest = await window.crypto.subtle.digest('SHA-256', enc);
-        return btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-    }
-
+    // --- SPOTIFY AUTH FLOW ---
     async function login() {
-        const verifier = await generateCodeVerifier();
+        const verifier = Array.from(window.crypto.getRandomValues(new Uint8Array(32)), b => ('0' + b.toString(16)).slice(-2)).join('');
         localStorage.setItem("verifier", verifier);
-        const challenge = await generateCodeChallenge(verifier);
+        const encoder = new TextEncoder();
+        const data = encoder.encode(verifier);
+        const digest = await window.crypto.subtle.digest('SHA-256', data);
+        const challenge = btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        
         const params = new URLSearchParams({
             client_id: SPOTIFY_CLIENT_ID, response_type: "code", redirect_uri: REDIRECT_URI,
-            scope: "playlist-read-private playlist-read-collaborative", code_challenge_method: "S256", code_challenge: challenge
+            scope: "playlist-read-private", code_challenge_method: "S256", code_challenge: challenge
         });
         window.location = `${AUTH_ENDPOINT}?${params}`;
     }
@@ -156,93 +126,64 @@
             client_id: SPOTIFY_CLIENT_ID, grant_type: "authorization_code", code,
             redirect_uri: REDIRECT_URI, code_verifier: localStorage.getItem("verifier")
         });
-        try {
-            const res = await fetch(TOKEN_ENDPOINT, { method: "POST", headers: {"Content-Type":"application/x-www-form-urlencoded"}, body });
-            const data = await res.json();
-            if (data.access_token) {
-                localStorage.setItem("spotify_token", data.access_token);
-                location.reload();
-            }
-        } catch(e) { console.error(e); }
+        const res = await fetch(TOKEN_ENDPOINT, { method: "POST", headers: {"Content-Type":"application/x-www-form-urlencoded"}, body });
+        const data = await res.json();
+        if (data.access_token) localStorage.setItem("spotify_token", data.access_token);
     }
 
-    // --- APP LOGIC ---
+    // --- UI & LOGIK ---
     async function init() {
-        if (!accessToken) { await handleCallback(); accessToken = localStorage.getItem("spotify_token"); }
-        if (!accessToken) { app.innerHTML = `<button onclick="login()">Login mit Spotify</button>`; return; }
+        if (!accessToken) await handleCallback();
+        accessToken = localStorage.getItem("spotify_token");
+        if (!accessToken) { app.innerHTML = `<button onclick="login()">Mit Spotify verbinden</button>`; return; }
         
-        app.innerHTML = `<h2>Deine Playlists</h2><div id="playlists" class="playlist-grid">Lade...</div><div id="songs" class="song-grid"></div>`;
-        
-        try {
-            const { data } = await axios.get(`${API_ENDPOINT}/me/playlists`, { headers: { Authorization: "Bearer " + accessToken } });
-            document.getElementById("playlists").innerHTML = data.items.map(p => `
-                <div class="playlist-card">
-                    <img src="${p.images[0]?.url||''}" width="100%">
-                    <div style="margin:10px 0;"><b>${p.name}</b></div>
-                    <button onclick="loadTracks('${p.id}')">Starten</button>
-                </div>
-            `).join("");
-        } catch (e) { localStorage.removeItem("spotify_token"); app.innerHTML += "<br>Session expired."; }
+        app.innerHTML = `<h2>Wähle eine Playlist</h2><div id="playlists" class="playlist-grid"></div><div id="songs" class="song-grid"></div>`;
+        const { data } = await axios.get(`${API_ENDPOINT}/me/playlists`, { headers: { Authorization: "Bearer " + accessToken } });
+        document.getElementById("playlists").innerHTML = data.items.map(p => `
+            <div class="playlist-card">
+                <img src="${p.images[0]?.url||''}" width="100%">
+                <p><b>${p.name}</b></p>
+                <button onclick="loadTracks('${p.id}')">Songs laden</button>
+            </div>
+        `).join("");
     }
 
     async function loadTracks(pid) {
         const box = document.getElementById("songs");
-        box.innerHTML = `<p>Lade Playlist...</p>`;
-        
-        // Hole Tracks
+        box.innerHTML = `<p>Analysiere Jahre... Bitte warten (Discogs Rate Limit)...</p>`;
         const { data } = await axios.get(`${API_ENDPOINT}/playlists/${pid}/tracks`, { headers: { Authorization: "Bearer " + accessToken } });
         box.innerHTML = "";
 
         for (const item of data.items) {
             const t = item.track;
             if (!t) continue;
-            
             const div = document.createElement("div");
             div.className = "song-card";
-            const yearId = `y-${t.id}`;
-            const infoId = `i-${t.id}`;
-            
-            let spotifyYear = t.album.release_date.substring(0,4);
+            const yId = `y-${t.id}`, iId = `i-${t.id}`;
+            let sYear = t.album.release_date.substring(0,4);
 
             div.innerHTML = `
                 <img src="${t.album.images[1]?.url||''}" width="80" style="border-radius:4px"><br>
-                <b>${t.name}</b><br>
-                <small>${t.artists[0].name}</small><br>
-                <span id="${yearId}" class="year-badge" style="color:#888;">${spotifyYear}</span>
-                <div id="${infoId}" class="source-badge">Spotify</div>
+                <b>${t.name}</b><br><small>${t.artists[0].name}</small><br>
+                <span id="${yId}" class="year-badge" style="color:#888;">${sYear}</span>
+                <div id="${iId}" class="source-badge">Spotify</div>
                 <canvas id="qr-${t.id}"></canvas>
             `;
             box.appendChild(div);
+            QRCode.toCanvas(document.getElementById(`qr-${t.id}`), t.external_urls.spotify, { width: 110, margin:1, color: {dark:"#1db954"} });
 
-            QRCode.toCanvas(document.getElementById(`qr-${t.id}`), t.external_urls.spotify, { width: 120, margin:1, color: {dark:"#1db954"} });
-
-            // DELAY
-            await new Promise(r => setTimeout(r, 1100)); 
-            
-            // NEUE LOGIK: Wenn Discogs Artist Match fehlschlägt, kommt null zurück
-            getDiscogsYear(t.artists[0].name, t.name).then(res => {
-                const el = document.getElementById(yearId);
-                const info = document.getElementById(infoId);
-                
-                if (res && res.year) {
-                    // Logic: Wenn Discogs Jahr existiert, nehmen wir es.
-                    // AUSSER: Es ist deutlich älter als Spotify (z.B. >50 Jahre Differenz und Spotify ist neu), 
-                    // dann könnte es immer noch ein Fehler sein, aber der Artist-Check sollte das abfangen.
-                    
-                    // Wir vertrauen dem Artist-Check jetzt:
-                    if (res.year !== spotifyYear) {
-                         el.textContent = res.year;
-                         el.style.color = "#ffcc00"; 
-                         info.textContent = `Via ${res.source}`;
-                         info.style.color = "#ffcc00";
-                    } else {
-                         el.style.color = "#fff";
-                         info.textContent = "Bestätigt (Discogs)";
-                    }
+            // Discogs Abfrage mit 1.1s Delay (Rate Limit Protection)
+            await new Promise(r => setTimeout(r, 1100));
+            getDiscogsYear(t.artists[0].name, t.name, sYear).then(res => {
+                const el = document.getElementById(yId), info = document.getElementById(iId);
+                if (res && res.year && res.year !== sYear) {
+                    el.textContent = res.year;
+                    el.style.color = "#ffcc00"; 
+                    info.textContent = `Korrigiert via ${res.source}`;
+                    info.style.color = "#ffcc00";
                 } else {
-                    // Discogs hat nichts passendes gefunden (Artist mismatch oder kein Eintrag)
-                    // Wir bleiben beim Spotify Datum
-                    info.textContent = "Kein Match in DB";
+                    el.style.color = "#fff";
+                    info.textContent = res ? "Bestätigt" : "Spotify Original";
                 }
             });
         }
