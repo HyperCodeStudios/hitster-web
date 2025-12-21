@@ -163,8 +163,12 @@
                 <canvas id="qr-${t.id}"></canvas>
             `;
             box.appendChild(div);
-            QRCode.toCanvas(document.getElementById(`qr-${t.id}`), t.external_urls.spotify, { width: 110, margin:1, color: {dark:"#1db954"} });
-
+            const playerUrl = `https://hypercodestudios.github.io/hitster-web/player.html?id=${t.id}`;
+            QRCode.toCanvas(document.getElementById(`qr-${t.id}`), playerUrl, { 
+                width: 110, 
+                margin: 1, 
+                color: { dark: "#1db954" } 
+            });
             // Discogs Abfrage mit 1.1s Delay (Rate Limit Protection)
             await new Promise(r => setTimeout(r, 1100));
             getDiscogsYear(t.artists[0].name, t.name, sYear).then(res => {
