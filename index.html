@@ -15,20 +15,23 @@
     
     .main-container { width: 90%; max-width: 500px; text-align: center; flex-grow: 1; display: flex; flex-direction: column; }
     
-    .btn { background: var(--spotify-green); border: none; color: white; padding: 18px 32px; border-radius: 50px; cursor: pointer; font-size: 1.2rem; font-weight: bold; transition: transform 0.2s; box-shadow: 0 4px 15px rgba(29, 185, 84, 0.3); text-decoration: none; display: inline-block; margin: 10px 0; }
+    .btn { background: var(--spotify-green); border: none; color: white; padding: 18px 32px; border-radius: 50px; cursor: pointer; font-size: 1.2rem; font-weight: bold; transition: transform 0.2; box-shadow: 0 4px 15px rgba(29, 185, 84, 0.3); margin: 10px 5px; }
     .btn:active { transform: scale(0.95); }
     .btn:disabled { background: #444; box-shadow: none; cursor: not-allowed; }
-    
-    /* Scanner Styling */
-    #reader { width: 100%; border-radius: 15px; overflow: hidden; border: 2px solid var(--spotify-green) !important; background: #000; }
-    #reader button { background: var(--spotify-green) !important; color: white !important; border-radius: 5px !important; border: none !important; padding: 10px !important; cursor: pointer; }
 
-    #status-box { background: var(--card-bg); border-radius: 15px; padding: 25px; margin: 20px 0; min-height: 80px; display: flex; align-items: center; justify-content: center; border: 1px solid #333; }
-    .error { color: #ff5555; }
+    /* Controls Styling */
+    .controls-row { display: flex; justify-content: center; align-items: center; gap: 10px; margin-top: 10px; }
+    .btn-small { background: #333; border: none; color: white; padding: 12px; border-radius: 50%; cursor: pointer; font-size: 1rem; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; }
+    .btn-small:hover { background: #444; }
+
+    #reader { width: 100%; border-radius: 15px; overflow: hidden; border: 2px solid var(--spotify-green) !important; background: #000; margin-bottom: 15px; }
+    #reader button { background: var(--spotify-green) !important; color: white !important; border-radius: 5px !important; border: none !important; padding: 8px !important; }
+
+    #status-box { background: var(--card-bg); border-radius: 15px; padding: 20px; margin: 10px 0; min-height: 60px; border: 1px solid #333; }
     .success { color: var(--spotify-green); font-weight: bold; }
-    .hint { font-size: 0.85rem; color: #888; margin-top: 15px; line-height: 1.4; }
+    .hint { font-size: 0.85rem; color: #888; margin-top: 10px; }
     
-    .admin-link { margin-top: auto; padding: 40px; color: #555; text-decoration: none; font-size: 0.9rem; }
+    .admin-link { margin-top: auto; padding: 30px; color: #555; text-decoration: none; font-size: 0.9rem; }
   </style>
 </head>
 <body>
@@ -39,7 +42,7 @@
 
   <div class="main-container">
     <div id="login-section" style="display:none;">
-      <p>Verbinde dein Spotify Premium Konto, um zu spielen.</p>
+      <p>Verbinde dein Spotify Premium Konto.</p>
       <button class="btn" onclick="login()">Spotify verbinden</button>
     </div>
 
@@ -47,18 +50,22 @@
       <div id="reader"></div>
       
       <div id="status-box">
-        <div id="message">Bereit zum Scannen einer Karte!</div>
+        <div id="message">Bereit zum Scannen!</div>
       </div>
 
-      <button class="btn" id="playBtn" disabled>▶ Lied abspielen</button>
+      <div class="controls-row">
+        <button class="btn-small" onclick="seek(-15000)">-15s</button>
+        <button class="btn" id="playPauseBtn" onclick="togglePlayPause()">▶ Play</button>
+        <button class="btn-small" onclick="seek(15000)">+15s</button>
+      </div>
       
       <p class="hint" id="device-hint" style="display:none;">
-        💡 <b>Hinweis:</b> Spotify muss auf deinem Handy im Hintergrund geöffnet sein.
+        💡 <b>Hinweis:</b> Öffne Spotify auf deinem Handy!
       </p>
     </div>
   </div>
 
-  <a href="admin.html" class="admin-link">⚙️ Karten-Editor (Playlists laden)</a>
+  <a href="admin.html" class="admin-link">⚙️ Karten-Editor</a>
 
   <script>
     const SPOTIFY_CLIENT_ID = "ba3eba27da4948e7bcad1872acdc48ab"; 
@@ -67,34 +74,76 @@
     const TOKEN_ENDPOINT = "https://accounts.spotify.com/api/token";
 
     let accessToken = localStorage.getItem("spotify_token");
-    let currentTrackId = new URLSearchParams(window.location.search).get('id');
+    let isPlaying = false;
 
-    // --- QR SCANNER LOGIK ---
+    // --- QR SCANNER ---
     function onScanSuccess(decodedText) {
         try {
             const url = new URL(decodedText);
             const id = url.searchParams.get("id");
-            if (id && id !== currentTrackId) {
-                currentTrackId = id;
-                document.getElementById('playBtn').disabled = false;
-                document.getElementById('message').innerHTML = `<span class="success">Karte erkannt!</span><br>Klicke auf Play.`;
-                // Optional: Automatisches Abspielen aktivieren, indem man hier die play-Funktion aufruft
+            if (id) {
+                playTrack(id);
             }
-        } catch (e) {
-            console.error("Ungültiger QR Code");
-        }
+        } catch (e) { console.error("Scan Error"); }
     }
 
     function startScanner() {
-        const html5QrcodeScanner = new Html5QrcodeScanner("reader", { 
-            fps: 10, 
-            qrbox: {width: 250, height: 250},
-            aspectRatio: 1.0 
-        });
-        html5QrcodeScanner.render(onScanSuccess);
+        const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
+        scanner.render(onScanSuccess);
     }
 
-    // --- SPOTIFY AUTH (Original Logik beibehalten) ---
+    // --- SPOTIFY FUNKTIONEN ---
+    async function playTrack(trackId) {
+        const msg = document.getElementById('message');
+        try {
+            await axios({
+                method: 'put',
+                url: 'https://api.spotify.com/v1/me/player/play',
+                data: { uris: [`spotify:track:${trackId}`] },
+                headers: { 'Authorization': `Bearer ${accessToken}` }
+            });
+            msg.innerHTML = `<span class="success">✨ Musik läuft!</span>`;
+            isPlaying = true;
+            updatePlayButton();
+        } catch (err) {
+            msg.innerHTML = `<span style="color:red">Fehler: Kein aktives Gerät gefunden!</span>`;
+            document.getElementById('device-hint').style.display = "block";
+        }
+    }
+
+    async function togglePlayPause() {
+        const url = isPlaying ? 'pause' : 'play';
+        try {
+            await axios({
+                method: 'put',
+                url: `https://api.spotify.com/v1/me/player/${url}`,
+                headers: { 'Authorization': `Bearer ${accessToken}` }
+            });
+            isPlaying = !isPlaying;
+            updatePlayButton();
+        } catch (err) { console.error("Playback toggle failed"); }
+    }
+
+    async function seek(ms) {
+        try {
+            // Erst aktuellen Status holen, um Position zu wissen
+            const status = await axios.get('https://api.spotify.com/v1/me/player', {
+                headers: { 'Authorization': `Bearer ${accessToken}` }
+            });
+            const newPos = status.data.progress_ms + ms;
+            await axios({
+                method: 'put',
+                url: `https://api.spotify.com/v1/me/player/seek?position_ms=${newPos < 0 ? 0 : newPos}`,
+                headers: { 'Authorization': `Bearer ${accessToken}` }
+            });
+        } catch (err) { console.error("Seek failed"); }
+    }
+
+    function updatePlayButton() {
+        document.getElementById('playPauseBtn').textContent = isPlaying ? "⏸ Pause" : "▶ Play";
+    }
+
+    // --- AUTH & INIT (wie gehabt) ---
     async function login() {
         const verifier = Array.from(window.crypto.getRandomValues(new Uint8Array(32)), b => ('0' + b.toString(16)).slice(-2)).join('');
         localStorage.setItem("verifier", verifier);
@@ -102,81 +151,32 @@
         const data = encoder.encode(verifier);
         const digest = await window.crypto.subtle.digest('SHA-256', data);
         const challenge = btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-        
-        const scopes = "playlist-read-private user-modify-playback-state user-read-playback-state";
-        const authUrl = `${AUTH_ENDPOINT}?client_id=${SPOTIFY_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(scopes)}&code_challenge_method=S256&code_challenge=${challenge}`;
-        window.location = authUrl;
+        const scopes = "user-modify-playback-state user-read-playback-state";
+        window.location = `${AUTH_ENDPOINT}?client_id=${SPOTIFY_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(scopes)}&code_challenge_method=S256&code_challenge=${challenge}`;
     }
 
     async function handleCallback() {
         const code = new URLSearchParams(window.location.search).get("code");
         if (!code) return;
-        window.history.replaceState({}, document.title, REDIRECT_URI);
-        const body = new URLSearchParams({
-            client_id: SPOTIFY_CLIENT_ID, grant_type: "authorization_code", code,
-            redirect_uri: REDIRECT_URI, code_verifier: localStorage.getItem("verifier")
-        });
+        const body = new URLSearchParams({ client_id: SPOTIFY_CLIENT_ID, grant_type: "authorization_code", code, redirect_uri: REDIRECT_URI, code_verifier: localStorage.getItem("verifier") });
         const res = await fetch(TOKEN_ENDPOINT, { method: "POST", headers: {"Content-Type":"application/x-www-form-urlencoded"}, body });
         const data = await res.json();
-        if (data.access_token) {
-            localStorage.setItem("spotify_token", data.access_token);
-            location.reload();
-        }
-    }
-
-    function logout() {
-        localStorage.clear();
-        window.location.href = REDIRECT_URI;
+        if (data.access_token) { localStorage.setItem("spotify_token", data.access_token); window.location.href = REDIRECT_URI; }
     }
 
     async function init() {
         if (!accessToken) await handleCallback();
         accessToken = localStorage.getItem("spotify_token");
-
         if (!accessToken) {
             document.getElementById('login-section').style.display = 'block';
         } else {
-            try {
-                // Check Token
-                await axios.get('https://api.spotify.com/v1/me', {
-                    headers: { 'Authorization': `Bearer ${accessToken}` }
-                });
-                
-                document.getElementById('player-section').style.display = 'block';
-                document.getElementById('login-section').style.display = 'none';
-                
-                // Scanner starten
-                startScanner();
-
-                if (currentTrackId) {
-                    document.getElementById('playBtn').disabled = false;
-                    document.getElementById('message').textContent = "Karte bereit! Klicke auf Play.";
-                }
-            } catch (err) {
-                logout(); 
-            }
+            document.getElementById('player-section').style.display = 'block';
+            startScanner();
+            // Check if ID is in URL from start
+            const startId = new URLSearchParams(window.location.search).get('id');
+            if(startId) playTrack(startId);
         }
     }
-
-    document.getElementById('playBtn').onclick = async () => {
-        const msg = document.getElementById('message');
-        const hint = document.getElementById('device-hint');
-        msg.textContent = "Verbinde...";
-        
-        try {
-            await axios({
-                method: 'put',
-                url: 'https://api.spotify.com/v1/me/player/play',
-                data: { uris: [`spotify:track:${currentTrackId}`] },
-                headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }
-            });
-            msg.innerHTML = `<span class="success">✨ Musik läuft!</span>`;
-            hint.style.display = "none";
-        } catch (err) {
-            msg.innerHTML = `<span class="error"><b>Fehler:</b> Kein aktives Gerät.<br><small>Öffne Spotify auf deinem Handy!</small></span>`;
-            hint.style.display = "block";
-        }
-    };
 
     init();
   </script>
