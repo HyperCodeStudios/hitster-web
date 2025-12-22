@@ -8,36 +8,88 @@
   <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
     :root { --spotify-green: #1db954; --bg-black: #121212; --card-bg: #1e1e1e; }
+    
+    /* Verhindert jegliches Scrollen und fixiert die App auf die Displaygröße */
     * { box-sizing: border-box; }
-    body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; font-family: sans-serif; color: #fff; }
-    .app-container { display: flex; flex-direction: column; height: 100dvh; width: 100%; }
-    header { padding: 10px; text-align: center; background: var(--bg-black); flex-shrink: 0; border-bottom: 1px solid #333; position: relative; }
+    body, html { 
+      margin: 0; padding: 0; width: 100%; height: 100%; 
+      overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; 
+    }
+
+    .app-container {
+      display: flex; flex-direction: column;
+      height: 100dvh; /* Nutzt die exakte Displayhöhe auf Handys */
+      width: 100%;
+    }
+
+    header { 
+      padding: 10px; text-align: center; background: var(--bg-black);
+      flex-shrink: 0; 
+    }
     h1 { color: var(--spotify-green); margin: 0; font-size: 1.2rem; letter-spacing: 2px; }
-    #switch-cam-btn { position: absolute; right: 10px; top: 8px; background: #333; border: 1px solid #555; color: white; padding: 6px 10px; border-radius: 6px; font-size: 0.7rem; display: none; }
-    #scanner-section { flex-grow: 1; position: relative; background: #000; display: flex; justify-content: center; align-items: center; overflow: hidden; }
+
+    /* Scanner-Bereich */
+    #scanner-section {
+      flex-grow: 1; position: relative; background: #000;
+      display: flex; justify-content: center; align-items: center;
+      overflow: hidden;
+    }
     #reader { width: 100% !important; height: 100% !important; border: none !important; }
     #reader video { object-fit: cover !important; }
-    .scan-guide { position: absolute; width: 220px; height: 220px; border: 2px solid var(--spotify-green); border-radius: 25px; box-shadow: 0 0 0 2000px rgba(0,0,0,0.6); z-index: 5; pointer-events: none; }
-    .controls-panel { background: var(--card-bg); padding: 15px 20px 25px 20px; border-top: 1px solid #333; text-align: center; flex-shrink: 0; }
-    #message { font-size: 0.9rem; margin-bottom: 12px; color: #ccc; min-height: 1.2em; }
-    .playback-ui { display: flex; justify-content: space-around; align-items: center; max-width: 300px; margin: 0 auto; }
-    .btn-side { background: #333; border: none; color: white; width: 50px; height: 50px; border-radius: 50%; font-size: 0.8rem; cursor: pointer; }
-    .btn-play { background: var(--spotify-green); border: none; color: white; width: 65px; height: 65px; border-radius: 50%; font-size: 1.5rem; box-shadow: 0 4px 15px rgba(0,0,0,0.4); cursor: pointer; }
-    .login-overlay { position: absolute; inset: 0; background: var(--bg-black); z-index: 100; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 20px; }
+
+    /* Visueller Fokusrahmen */
+    .scan-guide {
+      position: absolute; width: 220px; height: 220px;
+      border: 2px solid var(--spotify-green); border-radius: 25px;
+      box-shadow: 0 0 0 2000px rgba(0,0,0,0.6); /* Verdunkelt alles drumherum */
+      z-index: 5; pointer-events: none;
+    }
+
+    /* Controls am unteren Rand */
+    .controls-panel {
+      background: var(--card-bg);
+      padding: 15px 20px 25px 20px;
+      border-top: 1px solid #333;
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    #message { 
+      font-size: 0.9rem; margin-bottom: 12px; color: #ccc; 
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    .playback-ui {
+      display: flex; justify-content: space-around; align-items: center; max-width: 300px; margin: 0 auto;
+    }
+
+    .btn-side { 
+      background: #333; border: none; color: white; 
+      width: 45px; height: 45px; border-radius: 50%; font-size: 0.8rem;
+    }
+    .btn-play { 
+      background: var(--spotify-green); border: none; color: white; 
+      width: 65px; height: 65px; border-radius: 50%; font-size: 1.5rem;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+    }
+
+    .login-overlay {
+      position: absolute; inset: 0; background: var(--bg-black);
+      z-index: 100; display: flex; flex-direction: column;
+      justify-content: center; align-items: center; padding: 20px;
+    }
+
     .hidden { display: none !important; }
   </style>
 </head>
 <body>
 
   <div class="app-container">
-    <header>
-      <h1>HITSTER</h1>
-      <button id="switch-cam-btn" onclick="switchCamera()">📷 Kamera</button>
-    </header>
+    <header><h1>HITSTER</h1></header>
 
     <div id="login-section" class="login-overlay hidden">
-      <p style="margin-bottom: 20px;">Spotify Premium Login</p>
-      <button class="btn-play" style="width: auto; border-radius: 30px; padding: 0 30px; font-size: 1rem;" onclick="login()">Anmelden</button>
+      <p style="text-align: center; margin-bottom: 20px;">Verbinde Spotify Premium zum Spielen</p>
+      <button class="btn-play" style="width: auto; border-radius: 30px; padding: 0 30px; font-size: 1rem;" onclick="login()">Spotify verbinden</button>
     </div>
 
     <main id="scanner-section">
@@ -46,13 +98,15 @@
     </main>
 
     <footer class="controls-panel">
-      <div id="message">Initialisiere...</div>
+      <div id="message">Kamera wird gestartet...</div>
       <div class="playback-ui">
         <button class="btn-side" onclick="seek(-15000)">-15s</button>
         <button class="btn-play" id="playBtn" onclick="togglePlayPause()">▶</button>
         <button class="btn-side" onclick="seek(15000)">+15s</button>
       </div>
-      <div style="margin-top: 15px;"><a href="admin.html" style="color: #666; font-size: 0.7rem; text-decoration: none;">⚙ Admin-Editor</a></div>
+      <div style="margin-top: 15px;">
+        <a href="admin.html" style="color: #666; font-size: 0.7rem; text-decoration: none;">⚙ Editor / Einstellungen</a>
+      </div>
     </footer>
   </div>
 
@@ -61,120 +115,89 @@
     const REDIRECT_URI = "https://hypercodestudios.github.io/hitster-web/";
     let accessToken = localStorage.getItem("spotify_token");
     let isPlaying = false;
-    let html5QrCode;
-    let currentCameraIndex = 0;
-    let availableCameras = [];
+    let scanner;
 
-    // --- AUTH ---
-    function login() {
-        const scopes = "user-modify-playback-state user-read-playback-state user-read-private";
-        // Offizielle Spotify URL
-        const authUrl = `https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&response_type=token&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(scopes)}`;
-        window.location.href = authUrl;
-    }
-
-    function logout() {
-        localStorage.removeItem("spotify_token");
-        accessToken = null;
-        document.getElementById('login-section').classList.remove('hidden');
-        if (html5QrCode) html5QrCode.stop().catch(() => {});
-    }
-
-    // --- API HELPER ---
-    async function spotifyCall(method, endpoint, data = null) {
+    // --- Kameraspezifische Logik für die Standard-Linse ---
+    async function startBestCamera() {
         try {
-            return await axios({
-                method,
-                url: `https://api.spotify.com/v1${endpoint}`,
-                data,
-                headers: { 'Authorization': `Bearer ${accessToken}` }
-            });
-        } catch (err) {
-            if (err.response && err.response.status === 401) logout();
-            throw err;
-        }
-    }
-
-    // --- SCANNER ---
-    async function initScanner() {
-        try {
-            availableCameras = await Html5Qrcode.getCameras();
-            if (availableCameras.length > 0) {
-                if (availableCameras.length > 1) document.getElementById('switch-cam-btn').style.display = 'block';
+            const devices = await Html5Qrcode.getCameras();
+            if (devices && devices.length > 0) {
+                // Suche nach einer Kamera, die NICHT "wide", "ultra" oder "tele" im Namen hat
+                // Die Hauptkamera ist oft die erste oder heißt "Camera 0"
+                let selectedCam = devices[0];
+                for (const device of devices) {
+                    const label = device.label.toLowerCase();
+                    if (label.includes('back') && !label.includes('wide') && !label.includes('ultra')) {
+                        selectedCam = device;
+                        break;
+                    }
+                }
                 
-                let bestCamIndex = availableCameras.findIndex(cam => {
-                    const label = cam.label.toLowerCase();
-                    return label.includes('back') && !label.includes('wide') && !label.includes('ultra');
-                });
-                
-                currentCameraIndex = (bestCamIndex !== -1) ? bestCamIndex : 0;
-                startCamera(availableCameras[currentCameraIndex].id);
+                scanner = new Html5Qrcode("reader");
+                await scanner.start(
+                    selectedCam.id, 
+                    { fps: 15, qrbox: 220 },
+                    (text) => {
+                        const id = new URL(text).searchParams.get("id");
+                        if(id) playTrack(id);
+                    }
+                );
+                document.getElementById('message').textContent = "Bereit zum Scannen";
             }
         } catch (err) {
-            document.getElementById('message').textContent = "Kamera-Zugriff blockiert.";
+            document.getElementById('message').textContent = "Kamerafehler: " + err;
         }
     }
 
-    async function startCamera(cameraId) {
-        if (html5QrCode) await html5QrCode.stop().catch(() => {});
-        html5QrCode = new Html5Qrcode("reader");
-        await html5QrCode.start(cameraId, { fps: 15, qrbox: 220 }, (text) => {
-            try {
-                const url = new URL(text);
-                const id = url.searchParams.get("id");
-                if(id) playTrack(id);
-            } catch(e) {}
-        });
-        document.getElementById('message').textContent = "Bereit zum Scannen";
-    }
-
-    async function switchCamera() {
-        currentCameraIndex = (currentCameraIndex + 1) % availableCameras.length;
-        await startCamera(availableCameras[currentCameraIndex].id);
-    }
-
-    // --- CONTROLS ---
     async function playTrack(id) {
         try {
-            await spotifyCall('put', '/me/player/play', { uris: [`spotify:track:${id}`] });
+            await axios.put('https://api.spotify.com/v1/me/player/play', 
+                { uris: [`spotify:track:${id}`] },
+                { headers: { Authorization: `Bearer ${accessToken}` } }
+            );
             isPlaying = true;
             document.getElementById('playBtn').textContent = "⏸";
-            document.getElementById('message').textContent = "Lied erkannt!";
+            document.getElementById('message').textContent = "Lied läuft!";
         } catch (e) {
-            document.getElementById('message').textContent = "Kein aktives Gerät / Spotify öffnen!";
+            document.getElementById('message').textContent = "Bitte Spotify App öffnen!";
         }
     }
 
     async function togglePlayPause() {
+        const action = isPlaying ? 'pause' : 'play';
         try {
-            if (isPlaying) {
-                await spotifyCall('put', '/me/player/pause');
-                isPlaying = false;
-            } else {
-                await spotifyCall('put', '/me/player/play');
-                isPlaying = true;
-            }
+            await axios.put(`https://api.spotify.com/v1/me/player/${action}`, {}, {
+                headers: { Authorization: `Bearer ${accessToken}` }
+            });
+            isPlaying = !isPlaying;
             document.getElementById('playBtn').textContent = isPlaying ? "⏸" : "▶";
         } catch (e) {}
     }
 
     async function seek(ms) {
         try {
-            const res = await spotifyCall('get', '/me/player');
-            const newPos = Math.max(0, (res.data.progress_ms || 0) + ms);
-            await spotifyCall('put', `/me/player/seek?position_ms=${newPos}`);
+            const res = await axios.get('https://api.spotify.com/v1/me/player', {
+                headers: { Authorization: `Bearer ${accessToken}` }
+            });
+            const newPos = Math.max(0, res.data.progress_ms + ms);
+            await axios.put(`https://api.spotify.com/v1/me/player/seek?position_ms=${newPos}`, {}, {
+                headers: { Authorization: `Bearer ${accessToken}` }
+            });
         } catch (e) {}
     }
 
-    // --- START ---
-    async function init() {
+    function login() {
+        const scopes = encodeURIComponent("user-modify-playback-state user-read-playback-state");
+        window.location = `https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&response_type=token&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${scopes}`;
+    }
+
+    function init() {
         const hash = window.location.hash.substring(1);
         if (hash) {
             const p = new URLSearchParams(hash);
-            const token = p.get('access_token');
-            if (token) {
-                localStorage.setItem("spotify_token", token);
-                accessToken = token;
+            accessToken = p.get('access_token');
+            if (accessToken) {
+                localStorage.setItem("spotify_token", accessToken);
                 window.history.replaceState({}, "", REDIRECT_URI);
             }
         }
@@ -182,13 +205,7 @@
         if (!accessToken) {
             document.getElementById('login-section').classList.remove('hidden');
         } else {
-            try {
-                await spotifyCall('get', '/me');
-                document.getElementById('login-section').classList.add('hidden');
-                initScanner();
-            } catch (e) {
-                logout();
-            }
+            startBestCamera();
         }
     }
 
