@@ -9,9 +9,9 @@
   <style>
     :root { --spotify-green: #1db954; --bg-black: #121212; --card-bg: #1e1e1e; }
     * { box-sizing: border-box; }
-    body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; color: #fff; }
+    body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; font-family: sans-serif; color: #fff; }
     .app-container { display: flex; flex-direction: column; height: 100dvh; width: 100%; }
-    header { padding: 10px; text-align: center; background: var(--bg-black); flex-shrink: 0; position: relative; border-bottom: 1px solid #333; }
+    header { padding: 10px; text-align: center; background: var(--bg-black); flex-shrink: 0; border-bottom: 1px solid #333; position: relative; }
     h1 { color: var(--spotify-green); margin: 0; font-size: 1.2rem; letter-spacing: 2px; }
     #switch-cam-btn { position: absolute; right: 10px; top: 8px; background: #333; border: 1px solid #555; color: white; padding: 6px 10px; border-radius: 6px; font-size: 0.7rem; display: none; }
     #scanner-section { flex-grow: 1; position: relative; background: #000; display: flex; justify-content: center; align-items: center; overflow: hidden; }
@@ -36,7 +36,7 @@
     </header>
 
     <div id="login-section" class="login-overlay hidden">
-      <p style="margin-bottom: 20px;">Spotify Premium erforderlich</p>
+      <p style="margin-bottom: 20px;">Spotify Premium Login</p>
       <button class="btn-play" style="width: auto; border-radius: 30px; padding: 0 30px; font-size: 1rem;" onclick="login()">Anmelden</button>
     </div>
 
@@ -65,10 +65,11 @@
     let currentCameraIndex = 0;
     let availableCameras = [];
 
-    // --- AUTH LOGIK ---
+    // --- AUTH ---
     function login() {
-        const scopes = encodeURIComponent("user-modify-playback-state user-read-playback-state user-read-private");
-        const authUrl = `https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&response_type=token&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${scopes}`;
+        const scopes = "user-modify-playback-state user-read-playback-state user-read-private";
+        // Offizielle Spotify URL
+        const authUrl = `https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&response_type=token&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(scopes)}`;
         window.location.href = authUrl;
     }
 
@@ -76,24 +77,23 @@
         localStorage.removeItem("spotify_token");
         accessToken = null;
         document.getElementById('login-section').classList.remove('hidden');
-        if (html5QrCode) html5QrCode.stop();
+        if (html5QrCode) html5QrCode.stop().catch(() => {});
     }
 
-    // --- API CALLS ---
-    const spotApi = axios.create({
-        baseURL: 'https://api.spotify.com/v1/me/player',
-        timeout: 5000
-    });
-
-    spotApi.interceptors.request.use(config => {
-        config.headers.Authorization = `Bearer ${accessToken}`;
-        return config;
-    });
-
-    spotApi.interceptors.response.use(r => r, err => {
-        if (err.response && err.response.status === 401) logout();
-        return Promise.reject(err);
-    });
+    // --- API HELPER ---
+    async function spotifyCall(method, endpoint, data = null) {
+        try {
+            return await axios({
+                method,
+                url: `https://api.spotify.com/v1${endpoint}`,
+                data,
+                headers: { 'Authorization': `Bearer ${accessToken}` }
+            });
+        } catch (err) {
+            if (err.response && err.response.status === 401) logout();
+            throw err;
+        }
+    }
 
     // --- SCANNER ---
     async function initScanner() {
@@ -101,14 +101,18 @@
             availableCameras = await Html5Qrcode.getCameras();
             if (availableCameras.length > 0) {
                 if (availableCameras.length > 1) document.getElementById('switch-cam-btn').style.display = 'block';
+                
                 let bestCamIndex = availableCameras.findIndex(cam => {
                     const label = cam.label.toLowerCase();
                     return label.includes('back') && !label.includes('wide') && !label.includes('ultra');
                 });
-                currentCameraIndex = bestCamIndex !== -1 ? bestCamIndex : 0;
+                
+                currentCameraIndex = (bestCamIndex !== -1) ? bestCamIndex : 0;
                 startCamera(availableCameras[currentCameraIndex].id);
             }
-        } catch (err) { document.getElementById('message').textContent = "Kamera-Zugriff verweigert."; }
+        } catch (err) {
+            document.getElementById('message').textContent = "Kamera-Zugriff blockiert.";
+        }
     }
 
     async function startCamera(cameraId) {
@@ -129,38 +133,41 @@
         await startCamera(availableCameras[currentCameraIndex].id);
     }
 
-    // --- PLAYER FUNKTIONEN ---
+    // --- CONTROLS ---
     async function playTrack(id) {
         try {
-            await spotApi.put('/play', { uris: [`spotify:track:${id}`] });
+            await spotifyCall('put', '/me/player/play', { uris: [`spotify:track:${id}`] });
             isPlaying = true;
             document.getElementById('playBtn').textContent = "⏸";
-            document.getElementById('message').textContent = "Wird abgespielt...";
-        } catch (e) { 
-            document.getElementById('message').textContent = "Kein aktives Spotify-Gerät!";
+            document.getElementById('message').textContent = "Lied erkannt!";
+        } catch (e) {
+            document.getElementById('message').textContent = "Kein aktives Gerät / Spotify öffnen!";
         }
     }
 
     async function togglePlayPause() {
         try {
-            if (isPlaying) await spotApi.put('/pause');
-            else await spotApi.put('/play');
-            isPlaying = !isPlaying;
+            if (isPlaying) {
+                await spotifyCall('put', '/me/player/pause');
+                isPlaying = false;
+            } else {
+                await spotifyCall('put', '/me/player/play');
+                isPlaying = true;
+            }
             document.getElementById('playBtn').textContent = isPlaying ? "⏸" : "▶";
         } catch (e) {}
     }
 
     async function seek(ms) {
         try {
-            const res = await axios.get('https://api.spotify.com/v1/me/player', { headers: { Authorization: `Bearer ${accessToken}` } });
+            const res = await spotifyCall('get', '/me/player');
             const newPos = Math.max(0, (res.data.progress_ms || 0) + ms);
-            await spotApi.put(`/seek?position_ms=${newPos}`);
+            await spotifyCall('put', `/me/player/seek?position_ms=${newPos}`);
         } catch (e) {}
     }
 
-    // --- INIT ---
+    // --- START ---
     async function init() {
-        // Token aus URL extrahieren (nach Redirect)
         const hash = window.location.hash.substring(1);
         if (hash) {
             const p = new URLSearchParams(hash);
@@ -175,9 +182,8 @@
         if (!accessToken) {
             document.getElementById('login-section').classList.remove('hidden');
         } else {
-            // Validierung
             try {
-                await axios.get('https://api.spotify.com/v1/me', { headers: { Authorization: `Bearer ${accessToken}` } });
+                await spotifyCall('get', '/me');
                 document.getElementById('login-section').classList.add('hidden');
                 initScanner();
             } catch (e) {
