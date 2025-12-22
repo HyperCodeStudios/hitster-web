@@ -2,99 +2,99 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Hitster Web – Player</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Hitster Web</title>
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
   <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
-    :root { --spotify-green: #1db954; --bg-black: #121212; --card-bg: #181818; }
-    body { font-family: 'Segoe UI', Roboto, sans-serif; margin: 0; background: var(--bg-black); color: #fff; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+    :root { --spotify-green: #1db954; --bg-black: #121212; --card-bg: #1e1e1e; }
+    body { font-family: 'Segoe UI', sans-serif; margin: 0; background: var(--bg-black); color: #fff; overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
     
-    header { width: 100%; padding: 20px 0; text-align: center; background: rgba(0,0,0,0.3); margin-bottom: 20px; }
-    h1 { color: var(--spotify-green); margin: 0; font-size: 2rem; }
-    
-    .main-container { width: 90%; max-width: 500px; text-align: center; flex-grow: 1; display: flex; flex-direction: column; }
-    
-    .btn { background: var(--spotify-green); border: none; color: white; padding: 18px 32px; border-radius: 50px; cursor: pointer; font-size: 1.2rem; font-weight: bold; transition: transform 0.2; box-shadow: 0 4px 15px rgba(29, 185, 84, 0.3); margin: 10px 5px; }
-    .btn:active { transform: scale(0.95); }
-    .btn:disabled { background: #444; box-shadow: none; cursor: not-allowed; }
+    header { padding: 15px; text-align: center; z-index: 10; }
+    h1 { color: var(--spotify-green); margin: 0; font-size: 1.5rem; letter-spacing: 1px; }
 
-    /* Controls Styling */
-    .controls-row { display: flex; justify-content: center; align-items: center; gap: 10px; margin-top: 10px; }
-    .btn-small { background: #333; border: none; color: white; padding: 12px; border-radius: 50%; cursor: pointer; font-size: 1rem; width: 50px; height: 50px; display: flex; align-items: center; justify-content: center; }
-    .btn-small:hover { background: #444; }
-
-    #reader { width: 100%; border-radius: 15px; overflow: hidden; border: 2px solid var(--spotify-green) !important; background: #000; margin-bottom: 15px; }
-    #reader button { background: var(--spotify-green) !important; color: white !important; border-radius: 5px !important; border: none !important; padding: 8px !important; }
-
-    #status-box { background: var(--card-bg); border-radius: 15px; padding: 20px; margin: 10px 0; min-height: 60px; border: 1px solid #333; }
-    .success { color: var(--spotify-green); font-weight: bold; }
-    .hint { font-size: 0.85rem; color: #888; margin-top: 10px; }
+    /* Scanner-Container: Nimmt den oberen Teil ein */
+    #scanner-wrapper { position: relative; width: 100%; flex-grow: 1; display: flex; justify-content: center; align-items: center; background: #000; }
+    #reader { width: 100% !important; height: 100% !important; border: none !important; }
+    #reader video { object-fit: cover !important; }
+    /* Versteckt die UI-Elemente der Library */
+    #reader__dashboard, #reader__status_span { display: none !important; }
     
-    .admin-link { margin-top: auto; padding: 30px; color: #555; text-decoration: none; font-size: 0.9rem; }
+    /* Overlay für den Scan-Bereich */
+    .scan-overlay { position: absolute; width: 200px; height: 200px; border: 2px solid var(--spotify-green); border-radius: 20px; box-shadow: 0 0 0 1000px rgba(0,0,0,0.5); pointer-events: none; z-index: 5; }
+
+    /* Unterer Bereich für Controls */
+    .controls-container { background: var(--card-bg); padding: 20px; border-top-left-radius: 25px; border-top-right-radius: 25px; text-align: center; z-index: 10; box-shadow: 0 -5px 20px rgba(0,0,0,0.5); }
+    
+    #message { margin-bottom: 15px; font-weight: 500; font-size: 1.1rem; min-height: 1.4em; }
+
+    .playback-row { display: flex; justify-content: center; align-items: center; gap: 20px; }
+    .btn-seek { background: transparent; border: 1px solid #444; color: #ccc; width: 50px; height: 50px; border-radius: 50%; font-size: 0.9rem; cursor: pointer; }
+    .btn-main { background: var(--spotify-green); border: none; color: white; width: 70px; height: 70px; border-radius: 50%; font-size: 1.5rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 15px rgba(29, 185, 84, 0.4); }
+    
+    .login-box { padding: 40px; text-align: center; }
+    .hidden { display: none !important; }
+    
+    .hint { font-size: 0.75rem; color: #777; margin-top: 15px; }
   </style>
 </head>
 <body>
 
   <header>
-    <h1>🎶 Hitster Web</h1>
+    <h1>HITSTER</h1>
   </header>
 
-  <div class="main-container">
-    <div id="login-section" style="display:none;">
-      <p>Verbinde dein Spotify Premium Konto.</p>
-      <button class="btn" onclick="login()">Spotify verbinden</button>
-    </div>
-
-    <div id="player-section" style="display:none;">
-      <div id="reader"></div>
-      
-      <div id="status-box">
-        <div id="message">Bereit zum Scannen!</div>
-      </div>
-
-      <div class="controls-row">
-        <button class="btn-small" onclick="seek(-15000)">-15s</button>
-        <button class="btn" id="playPauseBtn" onclick="togglePlayPause()">▶ Play</button>
-        <button class="btn-small" onclick="seek(15000)">+15s</button>
-      </div>
-      
-      <p class="hint" id="device-hint" style="display:none;">
-        💡 <b>Hinweis:</b> Öffne Spotify auf deinem Handy!
-      </p>
-    </div>
+  <div id="login-section" class="login-box hidden">
+    <p>Bitte logge dich ein, um zu scannen.</p>
+    <button class="btn-main" style="width: auto; border-radius: 30px; padding: 0 30px;" onclick="login()">Spotify Login</button>
   </div>
 
-  <a href="admin.html" class="admin-link">⚙️ Karten-Editor</a>
+  <div id="player-section" class="hidden" style="display: contents;">
+    <div id="scanner-wrapper">
+      <div id="reader"></div>
+      <div class="scan-overlay"></div>
+    </div>
+
+    <div class="controls-container">
+      <div id="message">Bereit zum Scannen...</div>
+      
+      <div class="playback-row">
+        <button class="btn-seek" onclick="seek(-15000)">-15s</button>
+        <button class="btn-main" id="playPauseBtn" onclick="togglePlayPause()">▶</button>
+        <button class="btn-seek" onclick="seek(15000)">+15s</button>
+      </div>
+      
+      <p class="hint">Spotify muss im Hintergrund aktiv sein.</p>
+      <a href="admin.html" style="color: #444; text-decoration: none; font-size: 0.7rem; display: block; margin-top: 10px;">⚙ Editor</a>
+    </div>
+  </div>
 
   <script>
     const SPOTIFY_CLIENT_ID = "ba3eba27da4948e7bcad1872acdc48ab"; 
     const REDIRECT_URI = "https://hypercodestudios.github.io/hitster-web/";
-    const AUTH_ENDPOINT = "https://accounts.spotify.com/authorize";
-    const TOKEN_ENDPOINT = "https://accounts.spotify.com/api/token";
-
     let accessToken = localStorage.getItem("spotify_token");
     let isPlaying = false;
+    let html5QrCode;
 
-    // --- QR SCANNER ---
-    function onScanSuccess(decodedText) {
+    // --- AUTOMATISCHER SCANNER START ---
+    async function startScanner() {
+        html5QrCode = new Html5Qrcode("reader");
+        const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+        
         try {
-            const url = new URL(decodedText);
-            const id = url.searchParams.get("id");
-            if (id) {
-                playTrack(id);
-            }
-        } catch (e) { console.error("Scan Error"); }
+            // "environment" erzwingt die Rückkamera
+            await html5QrCode.start({ facingMode: "environment" }, config, (decodedText) => {
+                const url = new URL(decodedText);
+                const id = url.searchParams.get("id");
+                if (id) playTrack(id);
+            });
+        } catch (err) {
+            document.getElementById('message').textContent = "Kamera-Fehler. Bitte Zugriff erlauben.";
+        }
     }
 
-    function startScanner() {
-        const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
-        scanner.render(onScanSuccess);
-    }
-
-    // --- SPOTIFY FUNKTIONEN ---
+    // --- PLAYBACK LOGIK ---
     async function playTrack(trackId) {
-        const msg = document.getElementById('message');
         try {
             await axios({
                 method: 'put',
@@ -102,79 +102,66 @@
                 data: { uris: [`spotify:track:${trackId}`] },
                 headers: { 'Authorization': `Bearer ${accessToken}` }
             });
-            msg.innerHTML = `<span class="success">✨ Musik läuft!</span>`;
+            document.getElementById('message').innerHTML = `<span style="color:#1db954">Lied wird abgespielt!</span>`;
             isPlaying = true;
-            updatePlayButton();
+            updateUI();
         } catch (err) {
-            msg.innerHTML = `<span style="color:red">Fehler: Kein aktives Gerät gefunden!</span>`;
-            document.getElementById('device-hint').style.display = "block";
+            document.getElementById('message').innerHTML = `<span style="color:#ff5555">Spotify am Handy öffnen!</span>`;
         }
     }
 
     async function togglePlayPause() {
-        const url = isPlaying ? 'pause' : 'play';
+        const action = isPlaying ? 'pause' : 'play';
         try {
             await axios({
                 method: 'put',
-                url: `https://api.spotify.com/v1/me/player/${url}`,
+                url: `https://api.spotify.com/v1/me/player/${action}`,
                 headers: { 'Authorization': `Bearer ${accessToken}` }
             });
             isPlaying = !isPlaying;
-            updatePlayButton();
-        } catch (err) { console.error("Playback toggle failed"); }
+            updateUI();
+        } catch (e) {}
     }
 
     async function seek(ms) {
         try {
-            // Erst aktuellen Status holen, um Position zu wissen
             const status = await axios.get('https://api.spotify.com/v1/me/player', {
                 headers: { 'Authorization': `Bearer ${accessToken}` }
             });
-            const newPos = status.data.progress_ms + ms;
-            await axios({
-                method: 'put',
-                url: `https://api.spotify.com/v1/me/player/seek?position_ms=${newPos < 0 ? 0 : newPos}`,
+            const newPos = Math.max(0, status.data.progress_ms + ms);
+            await axios.put(`https://api.spotify.com/v1/me/player/seek?position_ms=${newPos}`, {}, {
                 headers: { 'Authorization': `Bearer ${accessToken}` }
             });
-        } catch (err) { console.error("Seek failed"); }
+        } catch (e) {}
     }
 
-    function updatePlayButton() {
-        document.getElementById('playPauseBtn').textContent = isPlaying ? "⏸ Pause" : "▶ Play";
+    function updateUI() {
+        document.getElementById('playPauseBtn').textContent = isPlaying ? "⏸" : "▶";
     }
 
-    // --- AUTH & INIT (wie gehabt) ---
-    async function login() {
-        const verifier = Array.from(window.crypto.getRandomValues(new Uint8Array(32)), b => ('0' + b.toString(16)).slice(-2)).join('');
-        localStorage.setItem("verifier", verifier);
-        const encoder = new TextEncoder();
-        const data = encoder.encode(verifier);
-        const digest = await window.crypto.subtle.digest('SHA-256', data);
-        const challenge = btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    // --- AUTH ---
+    function login() {
         const scopes = "user-modify-playback-state user-read-playback-state";
-        window.location = `${AUTH_ENDPOINT}?client_id=${SPOTIFY_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(scopes)}&code_challenge_method=S256&code_challenge=${challenge}`;
-    }
-
-    async function handleCallback() {
-        const code = new URLSearchParams(window.location.search).get("code");
-        if (!code) return;
-        const body = new URLSearchParams({ client_id: SPOTIFY_CLIENT_ID, grant_type: "authorization_code", code, redirect_uri: REDIRECT_URI, code_verifier: localStorage.getItem("verifier") });
-        const res = await fetch(TOKEN_ENDPOINT, { method: "POST", headers: {"Content-Type":"application/x-www-form-urlencoded"}, body });
-        const data = await res.json();
-        if (data.access_token) { localStorage.setItem("spotify_token", data.access_token); window.location.href = REDIRECT_URI; }
+        window.location = `https://accounts.spotify.com/authorize?client_id=${SPOTIFY_CLIENT_ID}&response_type=token&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(scopes)}`;
     }
 
     async function init() {
-        if (!accessToken) await handleCallback();
-        accessToken = localStorage.getItem("spotify_token");
+        // Check for Implicit Grant Token in URL
+        const hash = window.location.hash.substring(1);
+        if (hash) {
+            const params = new URLSearchParams(hash);
+            accessToken = params.get('access_token');
+            if (accessToken) {
+                localStorage.setItem("spotify_token", accessToken);
+                window.history.replaceState({}, document.title, REDIRECT_URI);
+            }
+        }
+
         if (!accessToken) {
-            document.getElementById('login-section').style.display = 'block';
+            document.getElementById('login-section').classList.remove('hidden');
         } else {
-            document.getElementById('player-section').style.display = 'block';
+            document.getElementById('player-section').classList.remove('hidden');
             startScanner();
-            // Check if ID is in URL from start
-            const startId = new URLSearchParams(window.location.search).get('id');
-            if(startId) playTrack(startId);
         }
     }
 
