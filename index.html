@@ -5,33 +5,30 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Hitster Web – Player</title>
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-  <script src="https://unpkg.com/qr-scanner@1.4.2/qr-scanner.min.js"></script>
-  <script>QrScanner.WORKER_PATH = 'https://unpkg.com/qr-scanner@1.4.2/qr-scanner-worker.min.js';</script>
-
+  <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
     :root { --spotify-green: #1db954; --bg-black: #121212; --card-bg: #181818; }
     body { font-family: 'Segoe UI', Roboto, sans-serif; margin: 0; background: var(--bg-black); color: #fff; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
     
-    header { width: 100%; padding: 20px 0; text-align: center; background: rgba(0,0,0,0.3); margin-bottom: 30px; }
+    header { width: 100%; padding: 20px 0; text-align: center; background: rgba(0,0,0,0.3); margin-bottom: 20px; }
     h1 { color: var(--spotify-green); margin: 0; font-size: 2rem; }
     
-    .main-container { width: 90%; max-width: 500px; text-align: center; flex-grow: 1; display: flex; flex-direction: column; justify-content: center; }
+    .main-container { width: 90%; max-width: 500px; text-align: center; flex-grow: 1; display: flex; flex-direction: column; }
     
-    .btn { background: var(--spotify-green); border: none; color: white; padding: 18px 32px; border-radius: 50px; cursor: pointer; font-size: 1.2rem; font-weight: bold; transition: transform 0.2s; box-shadow: 0 4px 15px rgba(29, 185, 84, 0.3); text-decoration: none; display: inline-block; }
+    .btn { background: var(--spotify-green); border: none; color: white; padding: 18px 32px; border-radius: 50px; cursor: pointer; font-size: 1.2rem; font-weight: bold; transition: transform 0.2s; box-shadow: 0 4px 15px rgba(29, 185, 84, 0.3); text-decoration: none; display: inline-block; margin: 10px 0; }
     .btn:active { transform: scale(0.95); }
     .btn:disabled { background: #444; box-shadow: none; cursor: not-allowed; }
     
-    .admin-link { margin-top: auto; padding: 40px; color: #555; text-decoration: none; font-size: 0.9rem; }
-    .admin-link:hover { color: var(--spotify-green); }
+    /* Scanner Styling */
+    #reader { width: 100%; border-radius: 15px; overflow: hidden; border: 2px solid var(--spotify-green) !important; background: #000; }
+    #reader button { background: var(--spotify-green) !important; color: white !important; border-radius: 5px !important; border: none !important; padding: 10px !important; cursor: pointer; }
 
-    #status-box { background: var(--card-bg); border-radius: 15px; padding: 25px; margin: 20px 0; min-height: 100px; display: flex; align-items: center; justify-content: center; border: 1px solid #333; }
+    #status-box { background: var(--card-bg); border-radius: 15px; padding: 25px; margin: 20px 0; min-height: 80px; display: flex; align-items: center; justify-content: center; border: 1px solid #333; }
     .error { color: #ff5555; }
-    .success { color: var(--spotify-green); }
+    .success { color: var(--spotify-green); font-weight: bold; }
     .hint { font-size: 0.85rem; color: #888; margin-top: 15px; line-height: 1.4; }
-
-    /* NEU: QR-Scanner Styles */
-    #scanner-controls { margin: 10px 0; }
-    #qr-video { width: 100%; max-width: 420px; border-radius: 12px; display: none; background: #000; }
+    
+    .admin-link { margin-top: auto; padding: 40px; color: #555; text-decoration: none; font-size: 0.9rem; }
   </style>
 </head>
 <body>
@@ -47,19 +44,14 @@
     </div>
 
     <div id="player-section" style="display:none;">
+      <div id="reader"></div>
+      
       <div id="status-box">
         <div id="message">Bereit zum Scannen einer Karte!</div>
       </div>
 
-      <div id="scanner-controls" style="margin:10px 0;">
-        <video id="qr-video" style="width:100%; max-width:420px; border-radius:12px; display:none; background:#000;"></video>
-        <div style="margin-top:12px;">
-          <button class="btn" id="startScanBtn">🔍 Karte scannen</button>
-          <button class="btn" id="stopScanBtn" style="display:none; margin-left:10px;">✖️ Stop</button>
-        </div>
-      </div>
-
       <button class="btn" id="playBtn" disabled>▶ Lied abspielen</button>
+      
       <p class="hint" id="device-hint" style="display:none;">
         💡 <b>Hinweis:</b> Spotify muss auf deinem Handy im Hintergrund geöffnet sein.
       </p>
@@ -69,81 +61,40 @@
   <a href="admin.html" class="admin-link">⚙️ Karten-Editor (Playlists laden)</a>
 
   <script>
-    // --- NEU: QR-Scanner LOGIK ---
-    let qrScanner = null;
-    const videoEl = document.getElementById('qr-video');
-    const startScanBtn = document.getElementById('startScanBtn');
-    const stopScanBtn = document.getElementById('stopScanBtn');
-    const messageEl = document.getElementById('message');
-    const playBtn = document.getElementById('playBtn');
+    const SPOTIFY_CLIENT_ID = "ba3eba27da4948e7bcad1872acdc48ab"; 
+    const REDIRECT_URI = "https://hypercodestudios.github.io/hitster-web/";
+    const AUTH_ENDPOINT = "https://accounts.spotify.com/authorize";
+    const TOKEN_ENDPOINT = "https://accounts.spotify.com/api/token";
 
-    function extractTrackId(s) {
-        if (!s) return null;
-        try {
-            if (s.includes('id=')) {
-                const u = new URL(s);
-                const id = new URLSearchParams(u.search).get('id');
-                if (id) return id;
-            }
-        } catch(e){ /* ignore */ }
-        let m;
-        if (m = s.match(/spotify:track:([A-Za-z0-9]+)/)) return m[1];
-        if (m = s.match(/track\/([A-Za-z0-9]+)/)) return m[1];
-        if (m = s.match(/([A-Za-z0-9_-]{22})/)) return m[1];
-        return null;
-    }
-
-    async function startScanner() {
-        try {
-            if (!qrScanner) {
-                qrScanner = new QrScanner(videoEl, result => {
-                    // On decode
-                    qrScanner.stop();
-                    videoEl.style.display = 'none';
-                    startScanBtn.style.display = '';
-                    stopScanBtn.style.display = 'none';
-                    messageEl.textContent = `Gescannter Inhalt: ${result}`;
-                    const found = extractTrackId(result);
-                    if (found) {
-                        trackId = found;
-                        playBtn.disabled = false;
-                        messageEl.innerHTML = `Karte erkannt! <b>Track:</b> ${trackId}`;
-                    } else {
-                        messageEl.innerHTML = `<span class="error">Kein gültiger Track gefunden.</span>`;
-                    }
-                }, { highlightScanRegion: true });
-            }
-            videoEl.style.display = '';
-            startScanBtn.style.display = 'none';
-            stopScanBtn.style.display = '';
-            messageEl.textContent = "Kamera läuft — halte die Karte vor die Kamera.";
-            await qrScanner.start();
-        } catch (err) {
-            messageEl.innerHTML = `<span class="error">Kamera konnte nicht gestartet werden. Erlaube den Kamera-Zugriff.</span>`;
-            videoEl.style.display = 'none';
-            startScanBtn.style.display = '';
-            stopScanBtn.style.display = 'none';
-        }
-    }
-
-    function stopScanner() {
-        if (qrScanner) {
-            try { qrScanner.stop(); } catch(e){}
-        }
-        videoEl.style.display = 'none';
-        startScanBtn.style.display = '';
-        stopScanBtn.style.display = 'none';
-        messageEl.textContent = "Scan gestoppt.";
-    }
-
-    startScanBtn.addEventListener('click', startScanner);
-    stopScanBtn.addEventListener('click', stopScanner);
-
-    // --- ÄNDERN: trackId veränderbar machen ---
     let accessToken = localStorage.getItem("spotify_token");
-    const params = new URLSearchParams(window.location.search);
-    let trackId = params.get('id');
+    let currentTrackId = new URLSearchParams(window.location.search).get('id');
 
+    // --- QR SCANNER LOGIK ---
+    function onScanSuccess(decodedText) {
+        try {
+            const url = new URL(decodedText);
+            const id = url.searchParams.get("id");
+            if (id && id !== currentTrackId) {
+                currentTrackId = id;
+                document.getElementById('playBtn').disabled = false;
+                document.getElementById('message').innerHTML = `<span class="success">Karte erkannt!</span><br>Klicke auf Play.`;
+                // Optional: Automatisches Abspielen aktivieren, indem man hier die play-Funktion aufruft
+            }
+        } catch (e) {
+            console.error("Ungültiger QR Code");
+        }
+    }
+
+    function startScanner() {
+        const html5QrcodeScanner = new Html5QrcodeScanner("reader", { 
+            fps: 10, 
+            qrbox: {width: 250, height: 250},
+            aspectRatio: 1.0 
+        });
+        html5QrcodeScanner.render(onScanSuccess);
+    }
+
+    // --- SPOTIFY AUTH (Original Logik beibehalten) ---
     async function login() {
         const verifier = Array.from(window.crypto.getRandomValues(new Uint8Array(32)), b => ('0' + b.toString(16)).slice(-2)).join('');
         localStorage.setItem("verifier", verifier);
@@ -152,13 +103,13 @@
         const digest = await window.crypto.subtle.digest('SHA-256', data);
         const challenge = btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
         
-        const scopes = "playlist-read-private playlist-read-collaborative user-modify-playback-state user-read-playback-state";
+        const scopes = "playlist-read-private user-modify-playback-state user-read-playback-state";
         const authUrl = `${AUTH_ENDPOINT}?client_id=${SPOTIFY_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(scopes)}&code_challenge_method=S256&code_challenge=${challenge}`;
         window.location = authUrl;
     }
 
     async function handleCallback() {
-        const code = params.get("code");
+        const code = new URLSearchParams(window.location.search).get("code");
         if (!code) return;
         window.history.replaceState({}, document.title, REDIRECT_URI);
         const body = new URLSearchParams({
@@ -173,40 +124,35 @@
         }
     }
 
-    // --- NEU: LOGOUT FUNKTION ---
     function logout() {
-        localStorage.removeItem("spotify_token");
-        localStorage.removeItem("verifier");
-        window.location.href = REDIRECT_URI; // Seite neu laden ohne Parameter
+        localStorage.clear();
+        window.location.href = REDIRECT_URI;
     }
 
-    // --- VERBESSERTE INIT FUNKTION ---
     async function init() {
         if (!accessToken) await handleCallback();
         accessToken = localStorage.getItem("spotify_token");
 
         if (!accessToken) {
             document.getElementById('login-section').style.display = 'block';
-            document.getElementById('player-section').style.display = 'none';
         } else {
-            // PRÜFUNG: Ist der Token noch gültig?
             try {
-                // Wir fragen einfach das Profil ab - wenn das klappt, ist der Token okay
+                // Check Token
                 await axios.get('https://api.spotify.com/v1/me', {
                     headers: { 'Authorization': `Bearer ${accessToken}` }
                 });
                 
-                // Alles okay -> Player zeigen
                 document.getElementById('player-section').style.display = 'block';
                 document.getElementById('login-section').style.display = 'none';
                 
-                if (trackId) {
+                // Scanner starten
+                startScanner();
+
+                if (currentTrackId) {
                     document.getElementById('playBtn').disabled = false;
-                    document.getElementById('message').textContent = "Karte erkannt! Klicke auf Play.";
+                    document.getElementById('message').textContent = "Karte bereit! Klicke auf Play.";
                 }
             } catch (err) {
-                // Token ist abgelaufen (Error 401)
-                console.warn("Sitzung abgelaufen, logge aus...");
                 logout(); 
             }
         }
@@ -221,7 +167,7 @@
             await axios({
                 method: 'put',
                 url: 'https://api.spotify.com/v1/me/player/play',
-                data: { uris: [`spotify:track:${trackId}`] },
+                data: { uris: [`spotify:track:${currentTrackId}`] },
                 headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }
             });
             msg.innerHTML = `<span class="success">✨ Musik läuft!</span>`;
