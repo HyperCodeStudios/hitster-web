@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Hitster Admin – Echte Jahre</title>
+  <title>Hitster Kartenersteller</title>
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -28,12 +28,12 @@
 <body>
 
   <header>
-    <h1>⚙️ Hitster Admin (Echte Jahre)</h1>
+    <h1>⚙️ Hitster Kartenersteller</h1>
     <a href="index.html" class="btn-back">⬅ Player</a>
   </header>
 
   <div id="app" style="text-align:center;">
-    <button id="export-btn" style="display:none;" onclick="generatePDF()">📄 PDF exportieren (S/W Duplex)</button>
+    <button id="export-btn" style="display:none;" onclick="generatePDF()">📄 PDF exportieren</button>
     <div id="status-msg">Wähle eine Playlist zum Analysieren...</div>
     <div id="playlists" class="playlist-grid"></div>
     <div id="songs" class="song-grid"></div>
@@ -47,7 +47,6 @@
     let currentSongs = [];
     let currentPlaylistName = "Hitster";
 
-    // --- LOGIK FÜR ECHTE JAHRE (DISCOGS) ---
     function normalize(str) { return str ? str.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim() : ""; }
     function cleanTitle(title) { return title.replace(/\s*-\s*.*remaster.*/i, '').replace(/\s*\(.*remaster.*\)/i, '').replace(/\s*-\s*radio\s*edit.*/i, '').replace(/\s*\(.*radio\s*edit.*\)/i, '').replace(/\s*-\s*live.*/i, '').replace(/\s*\(.*live.*\)/i, '').replace(/\s*feat\..*/i, '').replace(/\s*\/.*$/, '').trim(); }
     function isArtistMatch(sA, dT) { const s = normalize(sA); const d = normalize(dT); return (new RegExp(`\\b${s}\\b`, 'i')).test(d); }
@@ -131,19 +130,19 @@
     // --- PDF GENERIERUNG ---
     function generatePDF() {
         const doc = new jsPDF();
-        const w = 50, h = 50, m = 15, g = 5;
+        const w = 60, h = 60, m = 15, g = 5;
         let i = 0;
 
         while (i < currentSongs.length) {
-            let chunk = currentSongs.slice(i, i + 9);
+            let chunk = currentSongs.slice(i, i + 12);
             
             // Seite 1: Texte (Vorderseite)
             chunk.forEach((s, idx) => {
                 let x = m + (idx % 3) * (w + g), y = m + Math.floor(idx / 3) * (h + g);
                 doc.setDrawColor(0); doc.rect(x, y, w, h);
-                doc.setFontSize(7); doc.text(doc.splitTextToSize(s.name, w-4), x+w/2, y+8, {align:"center"});
+                doc.setFontSize(10); doc.text(doc.splitTextToSize(s.name, w-4), x+w/2, y+8, {align:"center"});
                 doc.setFontSize(26); doc.setFont(undefined, 'bold'); doc.text(s.year, x+w/2, y+28, {align:"center"});
-                doc.setFontSize(9); doc.text(doc.splitTextToSize(s.artist, w-4), x+w/2, y+42, {align:"center"});
+                doc.setFontSize(12); doc.text(doc.splitTextToSize(s.artist, w-4), x+w/2, y+42, {align:"center"});
             });
 
             // Seite 2: QRs (Rückseite gespiegelt für Duplex)
@@ -154,7 +153,6 @@
                 doc.setDrawColor(0); doc.rect(x, y, w, h);
                 const qrData = document.getElementById(s.qrCanvasId).toDataURL("image/png");
                 doc.addImage(qrData, 'PNG', x+10, y+10, 30, 30);
-                doc.setFontSize(5); doc.text(s.year + " - " + s.artist, x+w/2, y+48, {align:"center"});
             });
 
             i += 9;
