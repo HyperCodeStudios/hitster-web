@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="apple-mobile-web-app-capable" content="yes"> <title>TrackTime</title>
   
+  <link rel="manifest" href="manifest.json">
+
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TrackTime">
+
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
   <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
   
@@ -204,6 +210,17 @@
 
     // --- INIT ---
     async function init() {
+        async function requestCameraPermission() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                stream.getTracks().forEach(track => track.stop()); // Stream kurz öffnen und wieder schließen
+                return true;
+            } catch (err) {
+                showError("Kamera-Zugriff verweigert. Bitte in den Einstellungen erlauben.");
+                return false;
+            }
+        }
+
         if (!accessToken) await handleCallback();
         accessToken = localStorage.getItem("spotify_token");
 
