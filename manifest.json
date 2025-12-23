@@ -1,0 +1,18 @@
+{
+  "short_name": "Track Time",
+  "name": "Track Time Music Player",
+  "icons": [
+    {
+      "src": "TrackTimeIcon.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "index.html",
+  "background_color": "#000000",
+  "display": "standalone",
+  "scope": "./",
+  "theme_color": "#000000",
+  "orientation": "portrait"
+}
