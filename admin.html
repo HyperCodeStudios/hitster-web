@@ -171,7 +171,7 @@
                 doc.addImage(qrData, 'PNG', qrX, qrY, qrSize, qrSize);
             });
 
-            i += 9;
+            i += 12;
             if (i < currentSongs.length) doc.addPage();
         }
         doc.save(`Hitster_${currentPlaylistName}.pdf`);
