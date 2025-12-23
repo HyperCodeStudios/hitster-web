@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Hitster Admin – Print Edition</title>
+  <title>Hitster Admin – Echte Jahre</title>
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -11,29 +11,30 @@
   <style>
     body { font-family: 'Segoe UI', sans-serif; background: #121212; color: #fff; padding: 20px; margin: 0; }
     header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; padding-bottom: 10px; margin-bottom: 20px; }
-    h1 { color: #fff; margin: 0; }
+    h1 { color: #fff; margin: 0; font-size: 1.4rem; }
     .btn-back { color: #888; text-decoration: none; border: 1px solid #444; padding: 5px 15px; border-radius: 4px; }
     button { background: #fff; border: none; color: #000; padding: 12px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; margin: 5px; }
     button:disabled { background: #444; color: #888; cursor: not-allowed; }
+    #export-btn { background: #1db954; color: white; }
     
     .playlist-grid, .song-grid { display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; }
     .playlist-card { background: #181818; border-radius: 10px; padding: 15px; width: 200px; text-align: center; border: 1px solid #333; }
-    .song-card { background: #fff; color: #000; border-radius: 8px; padding: 10px; width: 180px; text-align: center; font-size: 0.9rem; }
-    .year-preview { font-size: 2rem; font-weight: bold; display: block; margin: 5px 0; }
-    canvas { display: none; } /* Nur für PDF Export */
-    .loading-info { color: #fff; font-style: italic; margin: 20px; text-align: center; }
+    .song-card { background: #fff; color: #000; border-radius: 8px; padding: 10px; width: 180px; text-align: center; border: 1px solid #000; }
+    .year-preview { font-size: 2.2rem; font-weight: 800; display: block; margin: 5px 0; }
+    canvas { display: none; }
+    .loading-info { color: #ffcc00; font-weight: bold; margin: 20px; text-align: center; }
   </style>
 </head>
 <body>
 
   <header>
-    <h1>⚙️ Hitster Print-Editor</h1>
+    <h1>⚙️ Hitster Admin (Echte Jahre)</h1>
     <a href="index.html" class="btn-back">⬅ Player</a>
   </header>
 
   <div id="app" style="text-align:center;">
-    <button id="export-btn" style="display:none;" onclick="generatePDF()">📄 PDF für Doppelseitendruck exportieren</button>
-    <div id="status-msg">Lade Playlists...</div>
+    <button id="export-btn" style="display:none;" onclick="generatePDF()">📄 PDF exportieren (S/W Duplex)</button>
+    <div id="status-msg">Wähle eine Playlist zum Analysieren...</div>
     <div id="playlists" class="playlist-grid"></div>
     <div id="songs" class="song-grid"></div>
   </div>
@@ -44,8 +45,27 @@
     const API_ENDPOINT = "https://api.spotify.com/v1";
     let accessToken = localStorage.getItem("spotify_token");
     let currentSongs = [];
-    let currentPlaylistName = "Hitster_Karten";
+    let currentPlaylistName = "Hitster";
 
+    // --- LOGIK FÜR ECHTE JAHRE (DISCOGS) ---
+    function normalize(str) { return str ? str.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim() : ""; }
+    function cleanTitle(title) { return title.replace(/\s*-\s*.*remaster.*/i, '').replace(/\s*\(.*remaster.*\)/i, '').replace(/\s*-\s*radio\s*edit.*/i, '').replace(/\s*\(.*radio\s*edit.*\)/i, '').replace(/\s*-\s*live.*/i, '').replace(/\s*\(.*live.*\)/i, '').replace(/\s*feat\..*/i, '').replace(/\s*\/.*$/, '').trim(); }
+    function isArtistMatch(sA, dT) { const s = normalize(sA); const d = normalize(dT); return (new RegExp(`\\b${s}\\b`, 'i')).test(d); }
+
+    async function getDiscogsYear(artist, title, sYear) {
+        if (!DISCOGS_TOKEN) return sYear;
+        const q = `${artist} - ${cleanTitle(title)}`;
+        const url = `https://api.discogs.com/database/search?q=${encodeURIComponent(q)}&type=master&sort=year&sort_order=asc&token=${DISCOGS_TOKEN}`;
+        try {
+            const res = await axios.get(url);
+            for (let item of res.data.results) {
+                if (item.year && item.year.match(/^\d{4}$/) && isArtistMatch(artist, item.title)) return item.year;
+            }
+        } catch (e) { console.error("Discogs Error", e); }
+        return sYear; // Fallback auf Spotify Jahr
+    }
+
+    // --- APP LOGIK ---
     async function init() {
         if (!accessToken) {
             document.getElementById('status-msg').innerHTML = "Bitte logge dich auf der Startseite ein.";
@@ -60,13 +80,13 @@
                     <button onclick="loadTracks('${p.id}', '${p.name.replace(/[^a-z0-9]/gi, '_')}')">Karten laden</button>
                 </div>
             `).join("");
-        } catch (e) { document.getElementById('status-msg').innerHTML = "Fehler beim Laden."; }
+        } catch (e) { document.getElementById('status-msg').innerHTML = "Sitzung abgelaufen."; }
     }
 
     async function loadTracks(pid, name) {
         currentPlaylistName = name;
         document.getElementById("playlists").innerHTML = "";
-        document.getElementById('status-msg').innerHTML = `<div class="loading-info">Analysiere Songs für Schwarz-Weiß Druck...</div>`;
+        document.getElementById('status-msg').innerHTML = `<div class="loading-info">Suche echte Release-Daten auf Discogs... bitte warten...</div>`;
         
         const { data } = await axios.get(`${API_ENDPOINT}/playlists/${pid}/tracks`, { headers: { Authorization: "Bearer " + accessToken } });
         currentSongs = [];
@@ -77,112 +97,70 @@
             const t = item.track;
             if (!t) continue;
             
-            // Jahr ermitteln (Dummy oder Discogs - hier vereinfacht für die Logik)
-            let sYear = t.album.release_date.substring(0,4);
+            // Erstveröffentlichung via Discogs suchen
+            let spotifyYear = t.album.release_date.substring(0,4);
+            let realYear = await getDiscogsYear(t.artists[0].name, t.name, spotifyYear);
             
             const songObj = {
-                id: t.id,
-                name: t.name,
-                artist: t.artists[0].name,
-                year: sYear,
-                qrCanvasId: `qr-${t.id}`
+                id: t.id, name: t.name, artist: t.artists[0].name, year: realYear, qrCanvasId: `qr-${t.id}`
             };
             currentSongs.push(songObj);
 
+            // Vorschau anzeigen
             const div = document.createElement("div");
             div.className = "song-card";
             div.innerHTML = `
-                <div style="font-size: 0.7rem; border-bottom: 1px solid #eee;">${songObj.name}</div>
+                <div style="font-size: 0.65rem;">${songObj.name}</div>
                 <span class="year-preview">${songObj.year}</span>
-                <div style="font-weight: bold;">${songObj.artist}</div>
+                <div style="font-weight: bold; border-top: 1px solid #ddd;">${songObj.artist}</div>
                 <canvas id="${songObj.qrCanvasId}"></canvas>
             `;
             box.appendChild(div);
 
             const playerUrl = `https://hypercodestudios.github.io/hitster-web/index.html?id=${t.id}`;
-            await QRCode.toCanvas(document.getElementById(songObj.qrCanvasId), playerUrl, { 
-                width: 200, margin: 1, color: { dark: "#000000", light: "#ffffff" } 
-            });
+            await QRCode.toCanvas(document.getElementById(songObj.qrCanvasId), playerUrl, { width: 150, margin: 1 });
+            
+            // Rate Limit: 1.1s Pause pro Song für Discogs API
+            await new Promise(r => setTimeout(r, 1100));
         }
         
-        document.getElementById('status-msg').innerHTML = `<h3>${currentSongs.length} Songs geladen</h3>`;
+        document.getElementById('status-msg').innerHTML = `<h3>${currentSongs.length} Karten bereit</h3>`;
         document.getElementById("export-btn").style.display = "inline-block";
     }
 
+    // --- PDF GENERIERUNG ---
     function generatePDF() {
         const doc = new jsPDF();
-        const cardWidth = 50;
-        const cardHeight = 50;
-        const margin = 15;
-        const gap = 5;
-        const cardsPerPage = 9; // 3x3 Gitter
+        const w = 50, h = 50, m = 15, g = 5;
+        let i = 0;
 
-        let songIndex = 0;
+        while (i < currentSongs.length) {
+            let chunk = currentSongs.slice(i, i + 9);
+            
+            // Seite 1: Texte (Vorderseite)
+            chunk.forEach((s, idx) => {
+                let x = m + (idx % 3) * (w + g), y = m + Math.floor(idx / 3) * (h + g);
+                doc.setDrawColor(0); doc.rect(x, y, w, h);
+                doc.setFontSize(7); doc.text(doc.splitTextToSize(s.name, w-4), x+w/2, y+8, {align:"center"});
+                doc.setFontSize(26); doc.setFont(undefined, 'bold'); doc.text(s.year, x+w/2, y+28, {align:"center"});
+                doc.setFontSize(9); doc.text(doc.splitTextToSize(s.artist, w-4), x+w/2, y+42, {align:"center"});
+            });
 
-        while (songIndex < currentSongs.length) {
-            let pageBatch = currentSongs.slice(songIndex, songIndex + cardsPerPage);
-            
-            // SEITE A: TEXT-KARTEN
-            drawTextPage(doc, pageBatch, cardWidth, cardHeight, margin, gap);
-            
-            // SEITE B: QR-CODES (Rückseite)
+            // Seite 2: QRs (Rückseite gespiegelt für Duplex)
             doc.addPage();
-            drawQRPage(doc, pageBatch, cardWidth, cardHeight, margin, gap);
-            
-            songIndex += cardsPerPage;
-            if (songIndex < currentSongs.length) doc.addPage();
+            chunk.forEach((s, idx) => {
+                let col = 2 - (idx % 3); // Spiegelung
+                let x = m + col * (w + g), y = m + Math.floor(idx / 3) * (h + g);
+                doc.setDrawColor(0); doc.rect(x, y, w, h);
+                const qrData = document.getElementById(s.qrCanvasId).toDataURL("image/png");
+                doc.addImage(qrData, 'PNG', x+10, y+10, 30, 30);
+                doc.setFontSize(5); doc.text(s.year + " - " + s.artist, x+w/2, y+48, {align:"center"});
+            });
+
+            i += 9;
+            if (i < currentSongs.length) doc.addPage();
         }
-
         doc.save(`Hitster_${currentPlaylistName}.pdf`);
-    }
-
-    function drawTextPage(doc, songs, w, h, m, g) {
-        songs.forEach((song, i) => {
-            let col = i % 3;
-            let row = Math.floor(i / 3);
-            let x = m + col * (w + g);
-            let y = m + row * (h + g);
-
-            doc.setDrawColor(0);
-            doc.rect(x, y, w, h);
-
-            // Titel (klein oben)
-            doc.setFontSize(7);
-            doc.setFont(undefined, 'normal');
-            doc.text(doc.splitTextToSize(song.name, w - 4), x + w/2, y + 8, { align: "center" });
-
-            // JAHR (Ganz groß mittig)
-            doc.setFontSize(24);
-            doc.setFont(undefined, 'bold');
-            doc.text(song.year, x + w/2, y + 28, { align: "center" });
-
-            // Interpret (Fett unten)
-            doc.setFontSize(9);
-            doc.text(doc.splitTextToSize(song.artist, w - 4), x + w/2, y + 42, { align: "center" });
-        });
-    }
-
-    function drawQRPage(doc, songs, w, h, m, g) {
-        // Bei der Rückseite müssen die Karten gespiegelt angeordnet sein, 
-        // damit sie beim Zusammenkleben (oder Duplexdruck) auf der richtigen Karte landen.
-        songs.forEach((song, i) => {
-            let col = 2 - (i % 3); // Spiegelung der Spalte für Duplex
-            let row = Math.floor(i / 3);
-            let x = m + col * (w + g);
-            let y = m + row * (h + g);
-
-            doc.setDrawColor(0);
-            doc.rect(x, y, w, h);
-
-            const canvas = document.getElementById(song.qrCanvasId);
-            const qrData = canvas.toDataURL("image/png");
-            // QR Code zentral auf der Rückseite
-            doc.addImage(qrData, 'PNG', x + 10, y + 10, 30, 30);
-            
-            // Kleine ID zur Kontrolle ganz unten
-            doc.setFontSize(5);
-            doc.text(song.year + " - " + song.artist.substring(0,10), x + w/2, y + 48, { align: "center" });
-        });
     }
 
     init();
