@@ -3,13 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta name="apple-mobile-web-app-capable" content="yes"> <title>TrackTime</title>
-  
-  <link rel="manifest" href="manifest.json">
-
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="TrackTime">
+  <title>TrackTime</title>
+  
+  <link rel="manifest" href="manifest.json">
 
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
   <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
@@ -29,13 +28,12 @@
       background: var(--bg-black);
       color: #fff;
       font-family: sans-serif;
-      overflow: hidden; /* Kein Scrollen */
-      overscroll-behavior: none; /* Kein "Bounce" Effekt auf iOS */
+      overflow: hidden;
+      overscroll-behavior: none;
       display: flex;
       flex-direction: column;
     }
     
-    /* Login Overlay (deckt alles ab wenn nicht eingeloggt) */
     #login-section {
       position: absolute; top: 0; left: 0; right: 0; bottom: 0;
       background: #121212; z-index: 1000;
@@ -48,7 +46,6 @@
       text-transform: uppercase; cursor: pointer;
     }
 
-    /* Haupt Layout */
     .main-container {
       flex: 1;
       display: flex;
@@ -58,9 +55,8 @@
       height: 100%;
     }
 
-    /* Scanner Bereich (Oben) */
     #scanner-container {
-      flex: 1; /* Nimmt verfügbaren Platz */
+      flex: 1;
       position: relative;
       background: #000;
       display: flex;
@@ -71,67 +67,55 @@
     #reader {
       width: 100% !important;
       height: 100% !important;
-      object-fit: cover;
       border: none !important;
     }
     #reader video { 
-        object-fit: cover; /* Video füllt den Bereich ohne Ränder */
-        border-radius: 0 0 20px 20px;
+        object-fit: cover !important; 
+        width: 100% !important;
+        height: 100% !important;
     }
 
-    /* Error Overlay (schwebt oben) */
     #error-display {
-        position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+        position: absolute; top: 40px; left: 50%; transform: translateX(-50%);
         z-index: 500; text-align: center; width: 90%; pointer-events: none;
     }
     .error-msg {
         background: rgba(255, 50, 50, 0.9); color: white; 
         padding: 10px 20px; border-radius: 8px; font-weight: bold; 
-        box-shadow: 0 4px 10px rgba(0,0,0,0.5);
-        display: inline-block;
     }
 
-    /* Controls Bereich (Unten) */
     .controls-container {
-      height: 35vh; /* Festes Drittel unten */
+      height: 30vh;
       background: #121212;
       display: flex;
       justify-content: space-evenly;
       align-items: center;
-      padding: 0 20px;
+      padding-bottom: env(safe-area-inset-bottom);
       border-top: 1px solid #333;
       position: relative;
+      z-index: 10;
     }
 
-    /* Buttons */
     .ctrl-btn {
       background: transparent; border: none; color: white;
       cursor: pointer; display: flex; align-items: center; justify-content: center;
-      opacity: 0.8; transition: opacity 0.2s;
     }
-    .ctrl-btn:active { opacity: 1; transform: scale(0.95); }
     
     .seek-btn svg { width: 40px; height: 40px; fill: #ddd; }
     
     .play-pause-btn {
       background: white; border-radius: 50%;
-      width: 80px; height: 80px; /* Groß für einfache Bedienung */
-      box-shadow: 0 5px 20px rgba(255,255,255,0.1);
-      opacity: 1;
+      width: 80px; height: 80px;
     }
     .play-pause-btn svg { width: 32px; height: 32px; fill: black; }
-    .play-pause-btn.playing svg { margin-left: 0; }
-    .play-pause-btn svg#icon-play { margin-left: 4px; } /* Optische Korrektur */
 
-    /* Kamera Switch Button (im Video) */
     .cam-switch-btn {
       position: absolute; top: 20px; right: 20px; z-index: 50;
       background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.3);
       color: white; border-radius: 50%; width: 44px; height: 44px;
-      display: flex; align-items: center; justify-content: center; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
     }
     
-    /* Admin Link versteckt unten rechts */
     .admin-link {
         position: absolute; bottom: 10px; right: 10px;
         opacity: 0.1; font-size: 20px; text-decoration: none;
@@ -141,45 +125,39 @@
 <body>
 
   <div id="login-section" style="display:none;">
-    <button class="btn-login" onclick="login()">Mit Spotify Premium verknüpfen</button>
+    <button class="btn-login" onclick="login()">Mit Spotify verbinden</button>
   </div>
 
   <div id="player-section" class="main-container" style="display:none;">
-    
     <div id="error-display"></div>
-
     <div id="scanner-container">
         <div id="reader"></div>
     </div>
-
     <div class="controls-container">
       <button class="ctrl-btn seek-btn" onclick="seek(-15000)">
         <svg viewBox="0 0 24 24"><path d="M11 18V6l-8.5 6 8.5 6zm.5-6l8.5 6V6l-8.5 6z"/></svg>
       </button>
-
       <button class="ctrl-btn play-pause-btn" id="toggleBtn" onclick="togglePlayback()">
         <svg id="icon-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
         <svg id="icon-pause" viewBox="0 0 24 24" style="display:none;"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
       </button>
-
       <button class="ctrl-btn seek-btn" onclick="seek(15000)">
         <svg viewBox="0 0 24 24"><path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z"/></svg>
       </button>
-      
       <a href="admin.html" class="admin-link">⚙️</a>
     </div>
   </div>
 
   <script>
     const SPOTIFY_CLIENT_ID = "ba3eba27da4948e7bcad1872acdc48ab"; 
-    const REDIRECT_URI = "https://hypercodestudios.github.io/TrackTime/";
+    const REDIRECT_URI = window.location.origin + window.location.pathname;
     
     const AUTH_ENDPOINT = "https://accounts.spotify.com/authorize";
     const TOKEN_ENDPOINT = "https://accounts.spotify.com/api/token";
     const API_BASE = "https://api.spotify.com/v1";
 
     let accessToken = localStorage.getItem("spotify_token");
-    let html5QrcodeScanner = null;
+    let html5QrCode = null;
     let devices = [];
     let currentDeviceIndex = 0;
 
@@ -210,130 +188,107 @@
 
     // --- INIT ---
     async function init() {
-        async function requestCameraPermission() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                stream.getTracks().forEach(track => track.stop()); // Stream kurz öffnen und wieder schließen
-                return true;
-            } catch (err) {
-                showError("Kamera-Zugriff verweigert. Bitte in den Einstellungen erlauben.");
-                return false;
-            }
-        }
-
         if (!accessToken) await handleCallback();
         accessToken = localStorage.getItem("spotify_token");
 
         if (!accessToken) {
             document.getElementById('login-section').style.display = 'flex';
         } else {
-            try {
-                await axios.get(`${API_BASE}/me`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
-                document.getElementById('login-section').style.display = 'none';
-                document.getElementById('player-section').style.display = 'flex';
-                
-                // Fullscreen Versuch beim Start (mobile Browser blocken das oft bis zum Klick)
-                document.body.requestFullscreen().catch(e => {});
-                
-                startScanner();
-            } catch (err) {
-                localStorage.removeItem("spotify_token");
-                window.location.href = REDIRECT_URI;
-            }
+            document.getElementById('login-section').style.display = 'none';
+            document.getElementById('player-section').style.display = 'flex';
+            hideMediaSession();
+            startScanner();
         }
     }
 
-    // --- SCANNER MIT KAMERA WAHL ---
+    // --- NEUE START SCANNER FUNKTION ---
     async function startScanner() {
         try {
+            // 1. Hardware-Zugriff explizit anfordern (PWA Fix)
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+            stream.getTracks().forEach(track => track.stop()); // Stream kurz öffnen & schließen
+
+            // 2. Kameras abrufen
             devices = await Html5Qrcode.getCameras();
-            if (devices && devices.length) {
-                // Rückkameras bevorzugen
-                devices.sort((a, b) => {
-                    const aB = a.label.toLowerCase().includes('back') || a.label.toLowerCase().includes('rück');
-                    const bB = b.label.toLowerCase().includes('back') || b.label.toLowerCase().includes('rück');
-                    return bB - aB;
-                });
-                if(!html5QrcodeScanner) html5QrcodeScanner = new Html5Qrcode("reader");
-                startCameraStream(0);
+            if (devices && devices.length > 0) {
+                // Rückkamera suchen
+                let backCam = devices.find(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rück')) || devices[0];
+                currentDeviceIndex = devices.indexOf(backCam);
+                
+                html5QrCode = new Html5Qrcode("reader");
+                startCameraStream(currentDeviceIndex);
             } else {
-                showError("Keine Kamera");
+                showError("Keine Kamera gefunden");
             }
-        } catch (err) { showError("Kamera Fehler"); }
+        } catch (err) {
+            showError("Kamera-Berechtigung fehlt!");
+            console.error(err);
+        }
     }
 
     function startCameraStream(index) {
-        if (index >= devices.length) index = 0;
-        currentDeviceIndex = index;
-        
-        // Stoppen falls läuft
-        if (html5QrcodeScanner.isScanning) {
-            html5QrcodeScanner.stop().then(() => runStart(index)).catch(() => runStart(index));
+        if (html5QrCode.isScanning) {
+            html5QrCode.stop().then(() => runStart(index)).catch(() => runStart(index));
         } else {
             runStart(index);
         }
     }
 
     function runStart(index) {
-        // UI Layout für Video optimieren
-        const config = { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 };
-        html5QrcodeScanner.start(devices[index].id, config, onScanSuccess)
+        const config = { fps: 15, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 };
+        html5QrCode.start(devices[index].id, config, onScanSuccess)
         .then(() => renderSwitchButton())
-        .catch(err => showError("Kamera Startfehler"));
+        .catch(() => showError("Fehler beim Stream-Start"));
     }
 
     function renderSwitchButton() {
         const container = document.getElementById('scanner-container');
-        const oldBtn = document.querySelector('.cam-switch-btn');
-        if(oldBtn) oldBtn.remove();
-
+        if (document.querySelector('.cam-switch-btn')) return;
         if (devices.length > 1) {
             const btn = document.createElement('div');
             btn.className = 'cam-switch-btn';
             btn.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" fill="white"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>';
-            btn.onclick = () => startCameraStream(currentDeviceIndex + 1);
+            btn.onclick = () => {
+                currentDeviceIndex = (currentDeviceIndex + 1) % devices.length;
+                startCameraStream(currentDeviceIndex);
+            };
             container.appendChild(btn);
         }
     }
 
     function onScanSuccess(decodedText) {
         let trackId = decodedText;
-        try {
-            const url = new URL(decodedText);
-            const idParam = url.searchParams.get("id");
-            if (idParam) trackId = idParam;
-        } catch(e) {}
-        
+        if (decodedText.includes("id=")) {
+            trackId = new URL(decodedText).searchParams.get("id");
+        }
         playTrack(trackId);
-        // Kurze Pause damit nicht 100x gescannt wird
-        html5QrcodeScanner.pause(true);
-        setTimeout(() => html5QrcodeScanner.resume(), 2500);
+        html5QrCode.pause(true);
+        setTimeout(() => html5QrCode.resume(), 3000);
     }
 
-    // --- PLAYER LOGIC ---
+    // --- PLAYER ---
     async function playTrack(trackId) {
-        if(trackId.includes('spotify:track:')) trackId = trackId.split(':')[2];
         try {
             await axios.put(`${API_BASE}/me/player/play`, 
                 { uris: [`spotify:track:${trackId}`] }, 
                 { headers: { 'Authorization': `Bearer ${accessToken}` } }
             );
+            hideMediaSession();
             updatePlayButtonUI(true);
         } catch (err) {
-            showError("Fehler: Spotify App öffnen!");
-            updatePlayButtonUI(false);
+            showError("Spotify App öffnen!");
         }
     }
 
     async function togglePlayback() {
         try {
             const state = await axios.get(`${API_BASE}/me/player`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
-            if(!state.data) return showError("Kein aktives Gerät");
-            
+            if(!state.data) return showError("Spotify inaktiv");
             const isPlaying = state.data.is_playing;
             await axios.put(`${API_BASE}/me/player/${isPlaying ? 'pause' : 'play'}`, {}, { headers: { 'Authorization': `Bearer ${accessToken}` } });
             updatePlayButtonUI(!isPlaying);
-        } catch (e) { showError("Steuerung fehlgeschlagen"); }
+            hideMediaSession();
+        } catch (e) { showError("Fehler"); }
     }
 
     async function seek(ms) {
@@ -341,23 +296,19 @@
             const state = await axios.get(`${API_BASE}/me/player`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
             if (!state.data) return;
             let newPos = state.data.progress_ms + ms;
-            if (newPos < 0) newPos = 0;
-            await axios.put(`${API_BASE}/me/player/seek?position_ms=${newPos}`, {}, { headers: { 'Authorization': `Bearer ${accessToken}` } });
-        } catch (e) { showError("Spulen fehlgeschlagen"); }
+            await axios.put(`${API_BASE}/me/player/seek?position_ms=${newPos > 0 ? newPos : 0}`, {}, { headers: { 'Authorization': `Bearer ${accessToken}` } });
+        } catch (e) {}
     }
 
     function updatePlayButtonUI(playing) {
-        const btn = document.getElementById('toggleBtn');
         document.getElementById('icon-play').style.display = playing ? 'none' : 'block';
         document.getElementById('icon-pause').style.display = playing ? 'block' : 'none';
-        if(playing) btn.classList.add('playing'); else btn.classList.remove('playing');
     }
 
-    // --- HELPER ---
     function showError(msg) {
         const el = document.getElementById('error-display');
-        el.innerHTML = `<div class="error-msg">⚠️ ${msg}</div>`;
-        setTimeout(() => el.innerHTML = '', 4000);
+        el.innerHTML = `<div class="error-msg">${msg}</div>`;
+        setTimeout(() => el.innerHTML = '', 3000);
     }
 
     function generateVerifier() { return Array.from(window.crypto.getRandomValues(new Uint8Array(32)), b => ('0' + b.toString(16)).slice(-2)).join(''); }
