@@ -85,7 +85,7 @@
     async function loadTracks(pid, name) {
         currentPlaylistName = name;
         document.getElementById("playlists").innerHTML = "";
-        document.getElementById('status-msg').innerHTML = `<div class="loading-info">Suche echte Release-Daten auf Discogs... bitte warten...</div>`;
+        document.getElementById('status-msg').innerHTML = `<div class="loading-info">Suche nach Jahresdaten der Lieder... Bitte warten...</div>`;
         
         const { data } = await axios.get(`${API_ENDPOINT}/playlists/${pid}/tracks`, { headers: { Authorization: "Bearer " + accessToken } });
         currentSongs = [];
