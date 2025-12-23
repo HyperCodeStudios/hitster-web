@@ -341,7 +341,7 @@
     async function togglePlayback() {
         try {
             const state = await axios.get(`${API_BASE}/me/player`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
-            if(!state.data) return showError("Kein aktives Gerät");
+            if(!state.data) return showError("Öffne zuerst die Spotify App und spiele einen Titel ab.");
             
             const isPlaying = state.data.is_playing;
             await axios.put(`${API_BASE}/me/player/${isPlaying ? 'pause' : 'play'}`, {}, { headers: { 'Authorization': `Bearer ${accessToken}` } });
