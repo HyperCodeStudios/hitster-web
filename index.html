@@ -90,9 +90,14 @@
 
     /* Error Overlay */
     #error-display {
-      position: absolute; top: calc(env(safe-area-inset-top) + 10px); 
-      left: 50%; transform: translateX(-50%);
-      z-index: 500; text-align: center; width: 90%; pointer-events: none;
+        position: fixed; /* Geändert von absolute auf fixed */
+        top: calc(env(safe-area-inset-top) + 20px); 
+        left: 50%; 
+        transform: translateX(-50%);
+        z-index: 2000; /* Höher als das Login-Overlay */
+        text-align: center; 
+        width: 90%; 
+        pointer-events: none;
     }
     .error-msg {
       background: rgba(255, 50, 50, 0.9); color: white; 
@@ -226,17 +231,27 @@
             document.getElementById('login-section').style.display = 'flex';
         } else {
             try {
-                await axios.get(`${API_BASE}/me`, { headers: { 'Authorization': `Bearer ${accessToken}` } });
+                // Test-Abruf der Nutzerdaten
+                await axios.get(`${API_BASE}/me`, { 
+                    headers: { 'Authorization': `Bearer ${accessToken}` } 
+                });
+                
                 document.getElementById('login-section').style.display = 'none';
                 document.getElementById('player-section').style.display = 'flex';
                 
-                // Fullscreen Versuch beim Start (mobile Browser blocken das oft bis zum Klick)
-                document.body.requestFullscreen().catch(e => {});
-                
                 startScanner();
             } catch (err) {
-                localStorage.removeItem("spotify_token");
-                window.location.href = REDIRECT_URI;
+                // Spezielle Prüfung auf Whitelist-Fehler (403)
+                if (err.response && err.response.status === 403) {
+                    showError("Zugriff verweigert: Du bist nicht auf der Whitelist dieses Projekts.");
+                    // Token löschen, damit der User es mit einem anderen Account versuchen kann
+                    localStorage.removeItem("spotify_token");
+                    setTimeout(() => location.reload(), 5000);
+                } else {
+                    // Anderer Fehler (z.B. Token abgelaufen)
+                    localStorage.removeItem("spotify_token");
+                    window.location.href = REDIRECT_URI;
+                }
             }
         }
     }
