@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Hitster Kartenersteller</title>
+  <title>TrackTime Kartenersteller</title>
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -28,7 +28,7 @@
 <body>
 
   <header>
-    <h1>⚙️ Hitster Kartenersteller</h1>
+    <h1>TrackTime Kartenersteller</h1>
     <a href="index.html" class="btn-back">⬅ Player</a>
   </header>
 
@@ -45,7 +45,7 @@
     const API_ENDPOINT = "https://api.spotify.com/v1";
     let accessToken = localStorage.getItem("spotify_token");
     let currentSongs = [];
-    let currentPlaylistName = "Hitster";
+    let currentPlaylistName = "TrackTime";
 
     function normalize(str) { return str ? str.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim() : ""; }
     function cleanTitle(title) { return title.replace(/\s*-\s*.*remaster.*/i, '').replace(/\s*\(.*remaster.*\)/i, '').replace(/\s*-\s*radio\s*edit.*/i, '').replace(/\s*\(.*radio\s*edit.*\)/i, '').replace(/\s*-\s*live.*/i, '').replace(/\s*\(.*live.*\)/i, '').replace(/\s*feat\..*/i, '').replace(/\s*\/.*$/, '').trim(); }
@@ -116,7 +116,7 @@
             `;
             box.appendChild(div);
 
-            const playerUrl = `https://hypercodestudios.github.io/hitster-web/index.html?id=${t.id}`;
+            const playerUrl = `https://hypercodestudios.github.io/TrackTime/index.html?id=${t.id}`;
             await QRCode.toCanvas(document.getElementById(songObj.qrCanvasId), playerUrl, { width: 150, margin: 1 });
             
             // Rate Limit: 1.1s Pause pro Song für Discogs API
@@ -174,7 +174,7 @@
             i += 12;
             if (i < currentSongs.length) doc.addPage();
         }
-        doc.save(`Hitster_${currentPlaylistName}.pdf`);
+        doc.save(`TrackTime_${currentPlaylistName}.pdf`);
     }
 
     init();

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta name="apple-mobile-web-app-capable" content="yes"> <title>Hitster Player</title>
+  <meta name="apple-mobile-web-app-capable" content="yes"> <title>TrackTime</title>
   
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
   <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
@@ -135,7 +135,7 @@
 <body>
 
   <div id="login-section" style="display:none;">
-    <button class="btn-login" onclick="login()">Starten</button>
+    <button class="btn-login" onclick="login()">Mit Spotify Premium verknüpfen</button>
   </div>
 
   <div id="player-section" class="main-container" style="display:none;">
@@ -166,7 +166,7 @@
 
   <script>
     const SPOTIFY_CLIENT_ID = "ba3eba27da4948e7bcad1872acdc48ab"; 
-    const REDIRECT_URI = "https://hypercodestudios.github.io/hitster-web/";
+    const REDIRECT_URI = "https://hypercodestudios.github.io/TrackTime/";
     
     const AUTH_ENDPOINT = "https://accounts.spotify.com/authorize";
     const TOKEN_ENDPOINT = "https://accounts.spotify.com/api/token";
