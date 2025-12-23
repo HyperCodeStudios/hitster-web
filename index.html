@@ -302,14 +302,6 @@
                 { headers: { 'Authorization': `Bearer ${accessToken}` } }
             );
             updatePlayButtonUI(true);
-            if ('mediaSession' in navigator) {
-                navigator.mediaSession.metadata = new MediaMetadata({
-                    title: '???',
-                    artist: 'Hitster Player',
-                    album: 'Scanner aktiv',
-                    artwork: [{ src: 'https://via.placeholder.com/512', sizes: '512x512', type: 'image/png' }]
-                });
-            }
         } catch (err) {
             showError("Fehler: Spotify App öffnen!");
             updatePlayButtonUI(false);
