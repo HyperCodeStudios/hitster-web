@@ -6,17 +6,23 @@
   <title>Hitster Web – Admin</title>
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  
   <style>
     body { font-family: system-ui, sans-serif; margin: 0; background: #121212; color: #fff; padding: 20px; }
     header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; padding-bottom: 10px; margin-bottom: 20px; }
     h1 { color: #1db954; margin: 0; }
     .btn-back { color: #888; text-decoration: none; border: 1px solid #444; padding: 5px 15px; border-radius: 4px; }
     button { background: #1db954; border: none; color: white; padding: 10px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; margin: 5px; }
+    button:disabled { background: #444; cursor: not-allowed; }
+    #export-btn { background: #fff; color: #000; display: none; margin-bottom: 20px; }
+    
     .playlist-grid, .song-grid { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
     .playlist-card, .song-card { background: #181818; border-radius: 10px; padding: 15px; width: 220px; text-align: center; box-shadow: 0 4px 10px #000; position: relative; }
     .year-badge { font-size: 1.6em; font-weight: bold; margin: 10px 0; display: block; color: #ffcc00; }
-    canvas { margin-top: 10px; border-radius: 4px; background: white; padding: 5px; }
-    small { color: #aaa; }
+    canvas { margin-top: 10px; border-radius: 4px; background: white; padding: 5px; display: none; } /* Canvas nur intern für PDF-Export */
+    .song-card img { border-radius: 4px; margin-bottom: 8px; }
+    small { color: #aaa; display: block; margin-bottom: 5px; }
     .loading-info { font-style: italic; color: #ffcc00; margin: 20px; }
   </style>
 </head>
@@ -28,41 +34,44 @@
   </header>
 
   <div id="app" style="text-align:center;">
-    <p>Lade deine Spotify Playlists...</p>
+    <button id="export-btn" onclick="generatePDF()">📄 PDF für Druck exportieren</button>
+    <div id="status-msg">Lade deine Spotify Playlists...</div>
+    <div id="playlists" class="playlist-grid"></div>
+    <div id="songs" class="song-grid"></div>
   </div>
   
   <script>
+    const { jsPDF } = window.jspdf;
     const DISCOGS_TOKEN = "wqMZDlzvFFtlVOnUskoEiDMMlHlBsUFdJVBthaqZ"; 
     const API_ENDPOINT = "https://api.spotify.com/v1";
     let accessToken = localStorage.getItem("spotify_token");
+    let currentSongs = [];
 
-    // --- DEINE ORIGINAL-FUNKTIONEN (UNVERÄNDERT) ---
     function normalize(str) { return str ? str.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim() : ""; }
     function cleanTitle(title) { return title.replace(/\s*-\s*.*remaster.*/i, '').replace(/\s*\(.*remaster.*\)/i, '').replace(/\s*-\s*radio\s*edit.*/i, '').replace(/\s*\(.*radio\s*edit.*\)/i, '').replace(/\s*-\s*live.*/i, '').replace(/\s*\(.*live.*\)/i, '').replace(/\s*feat\..*/i, '').replace(/\s*\/.*$/, '').trim(); }
     function isArtistMatch(sA, dT) { const s = normalize(sA); const d = normalize(dT); return (new RegExp(`\\b${s}\\b`, 'i')).test(d); }
 
     async function getDiscogsYear(artist, title, sYear) {
-        if (!DISCOGS_TOKEN) return null;
+        if (!DISCOGS_TOKEN) return sYear;
         const q = `${artist} - ${cleanTitle(title)}`;
         const url = `https://api.discogs.com/database/search?q=${encodeURIComponent(q)}&type=master&sort=year&sort_order=asc&token=${DISCOGS_TOKEN}`;
         try {
             const res = await axios.get(url);
             for (let item of res.data.results) {
-                if (item.year && item.year.match(/^\d{4}$/) && isArtistMatch(artist, item.title)) return { year: item.year, source: 'Discogs' };
+                if (item.year && item.year.match(/^\d{4}$/) && isArtistMatch(artist, item.title)) return item.year;
             }
         } catch (e) { console.error(e); }
-        return null;
+        return sYear;
     }
 
     async function init() {
         if (!accessToken) {
-            document.getElementById('app').innerHTML = `<p>Bitte logge dich zuerst auf der <a href="index.html" style="color:#1db954">Startseite</a> ein!</p>`;
+            document.getElementById('status-msg').innerHTML = `<p>Bitte logge dich zuerst auf der <a href="index.html" style="color:#1db954">Startseite</a> ein!</p>`;
             return;
         }
-        
         try {
             const { data } = await axios.get(`${API_ENDPOINT}/me/playlists`, { headers: { Authorization: "Bearer " + accessToken } });
-            document.getElementById("app").innerHTML = `<h2>Deine Playlists</h2><div id="playlists" class="playlist-grid"></div><div id="songs" class="song-grid"></div>`;
+            document.getElementById('status-msg').innerHTML = "<h2>Deine Playlists</h2>";
             document.getElementById("playlists").innerHTML = data.items.map(p => `
                 <div class="playlist-card">
                     <img src="${p.images[0]?.url||''}" width="100%" style="border-radius:8px">
@@ -70,41 +79,102 @@
                     <button onclick="loadTracks('${p.id}')">Karten generieren</button>
                 </div>
             `).join("");
-        } catch (e) { document.getElementById('app').innerHTML = "Fehler beim Laden. Sitzung evtl. abgelaufen."; }
+        } catch (e) { document.getElementById('status-msg').innerHTML = "Fehler beim Laden."; }
     }
 
     async function loadTracks(pid) {
         const box = document.getElementById("songs");
-        box.innerHTML = `<div class="loading-info">Analysiere Songs (Wegen Discogs-Limit ca. 1 Sekunde pro Song)...</div>`;
+        const exportBtn = document.getElementById("export-btn");
+        document.getElementById("playlists").innerHTML = "";
+        document.getElementById('status-msg').innerHTML = `<div class="loading-info">Hole Songdaten und Jahre (Discogs-Limit)...</div>`;
+        
         const { data } = await axios.get(`${API_ENDPOINT}/playlists/${pid}/tracks`, { headers: { Authorization: "Bearer " + accessToken } });
-        box.innerHTML = "";
+        currentSongs = [];
 
         for (const item of data.items) {
             const t = item.track;
             if (!t) continue;
+            
+            let sYear = t.album.release_date.substring(0,4);
+            const finalYear = await getDiscogsYear(t.artists[0].name, t.name, sYear);
+            
+            const songObj = {
+                id: t.id,
+                name: t.name,
+                artist: t.artists[0].name,
+                year: finalYear,
+                qrCanvasId: `qr-${t.id}`
+            };
+            currentSongs.push(songObj);
+
             const div = document.createElement("div");
             div.className = "song-card";
-            const yId = `y-${t.id}`;
-            let sYear = t.album.release_date.substring(0,4);
-
             div.innerHTML = `
-                <img src="${t.album.images[1]?.url||''}" width="80" style="border-radius:4px"><br>
-                <b>${t.name}</b><br><small>${t.artists[0].name}</small><br>
-                <span id="${yId}" class="year-badge">...</span>
-                <canvas id="qr-${t.id}"></canvas>
+                <small>${songObj.artist}</small>
+                <b>${songObj.name}</b>
+                <span class="year-badge">${songObj.year}</span>
+                <canvas id="${songObj.qrCanvasId}"></canvas>
             `;
             box.appendChild(div);
 
-            // WICHTIG: Die URL zeigt jetzt auf die index.html
             const playerUrl = `https://hypercodestudios.github.io/hitster-web/index.html?id=${t.id}`;
-            QRCode.toCanvas(document.getElementById(`qr-${t.id}`), playerUrl, { width: 130, margin:1, color: {dark:"#1db954"} });
-
-            await new Promise(r => setTimeout(r, 1100));
-            getDiscogsYear(t.artists[0].name, t.name, sYear).then(res => {
-                const el = document.getElementById(yId);
-                el.textContent = res ? res.year : sYear;
-            });
+            await QRCode.toCanvas(document.getElementById(songObj.qrCanvasId), playerUrl, { width: 200, margin: 1 });
+            
+            // Discogs Rate Limit umgehen
+            await new Promise(r => setTimeout(r, 1000));
         }
+        
+        document.getElementById('status-msg').innerHTML = `<h3>${currentSongs.length} Karten bereit</h3>`;
+        exportBtn.style.display = "inline-block";
+    }
+
+    function generatePDF() {
+        const doc = new jsPDF();
+        const cardWidth = 50;
+        const cardHeight = 50;
+        const margin = 10;
+        let x = margin;
+        let y = margin;
+
+        currentSongs.forEach((song, index) => {
+            // Kartenrahmen
+            doc.setDrawColor(200);
+            doc.rect(x, y, cardWidth, cardHeight);
+
+            // Text-Inhalt (Interpret & Titel)
+            doc.setFontSize(8);
+            doc.setTextColor(100);
+            doc.text(doc.splitTextToSize(song.artist, cardWidth - 10), x + 5, y + 10);
+            
+            doc.setFontSize(10);
+            doc.setTextColor(0);
+            doc.setFont(undefined, 'bold');
+            doc.text(doc.splitTextToSize(song.name, cardWidth - 10), x + 5, y + 20);
+
+            // Jahr
+            doc.setFontSize(14);
+            doc.setTextColor(29, 185, 84); // Spotify Green
+            doc.text(song.year, x + cardWidth/2, y + 35, { align: "center" });
+
+            // QR Code einbetten
+            const canvas = document.getElementById(song.qrCanvasId);
+            const qrData = canvas.toDataURL("image/png");
+            doc.addImage(qrData, 'PNG', x + 15, y + 38, 20, 20);
+
+            // Grid Logik: 3 Karten pro Reihe, 4 Reihen pro Seite
+            x += cardWidth + 5;
+            if (x + cardWidth > 200) {
+                x = margin;
+                y += cardHeight + 10;
+            }
+            if (y + cardHeight > 280) {
+                doc.addPage();
+                x = margin;
+                y = margin;
+            }
+        });
+
+        doc.save("Hitster_Karten.pdf");
     }
 
     init();
