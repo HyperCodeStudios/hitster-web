@@ -141,7 +141,7 @@
 <body>
 
   <div id="login-section" style="display:none;">
-    <button class="btn-login" onclick="login()">Mit Spotify Premium verknüpfen</button>
+    <button class="btn-login" onclick="goFullscreen(); login();">Mit Spotify Premium verknüpfen</button>
   </div>
 
   <div id="player-section" class="main-container" style="display:none;">
@@ -156,8 +156,8 @@
       <button class="ctrl-btn seek-btn" onclick="seek(-15000)">
         <svg viewBox="0 0 24 24"><path d="M11 18V6l-8.5 6 8.5 6zm.5-6l8.5 6V6l-8.5 6z"/></svg>
       </button>
-
-      <button class="ctrl-btn play-pause-btn" id="toggleBtn" onclick="togglePlayback()">
+      
+      <button class="ctrl-btn play-pause-btn" id="toggleBtn" onclick="goFullscreen(); togglePlayback();">
         <svg id="icon-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
         <svg id="icon-pause" viewBox="0 0 24 24" style="display:none;"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
       </button>
@@ -353,6 +353,15 @@
     async function generateChallenge(v) { 
         const d = await window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(v));
         return btoa(String.fromCharCode(...new Uint8Array(d))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); 
+    }
+
+    function goFullscreen() {
+        const elem = document.documentElement;
+        if (elem.requestFullscreen) {
+            elem.requestFullscreen();
+        } else if (elem.webkitRequestFullscreen) { /* iOS Safari Support */
+            elem.webkitRequestFullscreen();
+        }
     }
 
     init();
