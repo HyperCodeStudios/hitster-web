@@ -101,6 +101,25 @@
     .error { color: #ff5555; }
     
     .admin-link { margin: 30px 0; color: #555; text-decoration: none; font-size: 0.8rem; }
+
+    /* Button oben rechts im Kamerabild */
+    .cam-switch-btn {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 10;
+        background: rgba(0,0,0,0.6);
+        border: 1px solid #555;
+        color: white;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    #reader { position: relative; } /* Wichtig für die Positionierung */
   </style>
 </head>
 <body>
@@ -140,12 +159,12 @@
       </div>
 
       <p class="hint" id="device-hint">
-        💡 Spotify muss auf einem Gerät aktiv sein.
+        💡 Öffne Spotify im Hintergrund, starte ein Lied und pausiere es wieder!
       </p>
     </div>
   </div>
 
-  <a href="admin.html" class="admin-link">⚙️ Karten-Editor</a>
+  <a href="admin.html" class="admin-link">Karten-Editor</a>
 
   <script>
     // --- KONFIGURATION ---
@@ -234,19 +253,93 @@
         }
     }
 
-    // --- SCANNER LOGIK ---
-    function startScanner() {
-        // Scanner initialisieren
-        const config = { fps: 10, qrbox: { width: 250, height: 250 } };
-        html5QrcodeScanner = new Html5Qrcode("reader");
+    // Globale Variablen für Kamera-Handling
+    let devices = [];
+    let currentDeviceIndex = 0;
+
+    // --- NEUE SCANNER LOGIK ---
+    async function startScanner() {
+        try {
+            // 1. Alle Kameras abfragen
+            devices = await Html5Qrcode.getCameras();
+            
+            if (devices && devices.length) {
+                // Wir suchen zuerst nach Rückkameras ("back" im Label)
+                // Sortieren: Rückkameras zuerst
+                devices.sort((a, b) => {
+                    const aBack = a.label.toLowerCase().includes('back') || a.label.toLowerCase().includes('rück');
+                    const bBack = b.label.toLowerCase().includes('back') || b.label.toLowerCase().includes('rück');
+                    return bBack - aBack;
+                });
+
+                // Scanner Instanz erstellen (falls noch nicht da)
+                if(!html5QrcodeScanner) {
+                    html5QrcodeScanner = new Html5Qrcode("reader");
+                }
+
+                // Kamera starten (Standard: Die erste in der Liste)
+                startCameraByIndex(0);
+                
+            } else {
+                document.getElementById('message').innerHTML = "<span class='error'>Keine Kameras gefunden.</span>";
+            }
+        } catch (err) {
+            console.error("Kamera Fehler:", err);
+            document.getElementById('message').innerHTML = "<span class='error'>Zugriff verweigert oder Fehler.</span>";
+        }
+    }
+
+    function startCameraByIndex(index) {
+        if (html5QrcodeScanner.isScanning) {
+            html5QrcodeScanner.stop().then(() => {
+                startCameraStream(index);
+            });
+        } else {
+            startCameraStream(index);
+        }
+    }
+
+    function startCameraStream(index) {
+        if (index >= devices.length) index = 0;
+        currentDeviceIndex = index;
         
+        const cameraId = devices[index].id;
+        const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+
         html5QrcodeScanner.start(
-            { facingMode: "environment" }, 
-            config, 
+            cameraId, // HIER: Explizite ID statt "environment"
+            config,
             onScanSuccess
-        ).catch(err => {
-            document.getElementById('message').innerHTML = "<span class='error'>Kamera Fehler. Bitte erlaube Zugriff.</span>";
+        ).then(() => {
+            // Zeige Wechsel-Button nur wenn wir mehr als 1 Kamera haben
+            renderSwitchButton();
+        }).catch(err => {
+            document.getElementById('message').innerText = "Kamera Startfehler.";
         });
+    }
+
+    // Button in das Kamerabild einfügen
+    function renderSwitchButton() {
+        const readerDiv = document.getElementById('reader');
+        // Alten Button entfernen falls vorhanden
+        const oldBtn = document.querySelector('.cam-switch-btn');
+        if(oldBtn) oldBtn.remove();
+
+        if (devices.length > 1) {
+            const btn = document.createElement('button');
+            btn.className = 'cam-switch-btn';
+            btn.innerHTML = '<svg viewBox="0 0 24 24" style="width:20px;height:20px;fill:white;"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/></svg>'; // Oder ein Loop-Icon
+            btn.title = "Kamera wechseln";
+            btn.onclick = () => {
+                let nextIndex = currentDeviceIndex + 1;
+                if (nextIndex >= devices.length) nextIndex = 0;
+                startCameraByIndex(nextIndex);
+            };
+            readerDiv.appendChild(btn);
+            
+            // Icon für den Button ändern (Loop Pfeile)
+            btn.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" fill="white"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>';
+        }
     }
 
     function onScanSuccess(decodedText, decodedResult) {
