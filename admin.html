@@ -139,9 +139,10 @@
             // Seite 1: Texte (Vorderseite)
             chunk.forEach((s, idx) => {
                 let x = m + (idx % 3) * (w + g), y = m + Math.floor(idx / 3) * (h + g);
+                doc.setFont(undefined, 'bold');
                 doc.setDrawColor(0); doc.rect(x, y, w, h);
                 doc.setFontSize(14); doc.text(doc.splitTextToSize(s.name, w-4), x+w/2, y+8, {align:"center"});
-                doc.setFontSize(32); doc.setFont(undefined, 'bold'); doc.text(s.year, x+w/2, y+28, {align:"center"});
+                doc.setFontSize(32); doc.text(s.year, x+w/2, y+28, {align:"center"});
                 doc.setFontSize(12); doc.text(doc.splitTextToSize(s.artist, w-4), x+w/2, y+42, {align:"center"});
             });
 
@@ -158,7 +159,7 @@
                 doc.rect(x, y, w, h);
 
                 // QR-Code Größe berechnen (70% der Feldhöhe, damit genug Rand bleibt)
-                const qrSize = h * 0.7; 
+                const qrSize = h * 0.6;
                 
                 // Zentrierung berechnen: Startpunkt + (Hälfte des Feldes - Hälfte des QR-Codes)
                 const qrX = x + (w - qrSize) / 2;
