@@ -130,7 +130,7 @@
     // --- PDF GENERIERUNG ---
     function generatePDF() {
         const doc = new jsPDF();
-        const w = 60, h = 60, m = 15, g = 5;
+        const w = 60, h = 60, m = 15, g = 0;
         let i = 0;
 
         while (i < currentSongs.length) {
@@ -140,19 +140,34 @@
             chunk.forEach((s, idx) => {
                 let x = m + (idx % 3) * (w + g), y = m + Math.floor(idx / 3) * (h + g);
                 doc.setDrawColor(0); doc.rect(x, y, w, h);
-                doc.setFontSize(10); doc.text(doc.splitTextToSize(s.name, w-4), x+w/2, y+8, {align:"center"});
-                doc.setFontSize(26); doc.setFont(undefined, 'bold'); doc.text(s.year, x+w/2, y+28, {align:"center"});
+                doc.setFontSize(14); doc.text(doc.splitTextToSize(s.name, w-4), x+w/2, y+8, {align:"center"});
+                doc.setFontSize(32); doc.setFont(undefined, 'bold'); doc.text(s.year, x+w/2, y+28, {align:"center"});
                 doc.setFontSize(12); doc.text(doc.splitTextToSize(s.artist, w-4), x+w/2, y+42, {align:"center"});
             });
 
             // Seite 2: QRs (Rückseite gespiegelt für Duplex)
             doc.addPage();
             chunk.forEach((s, idx) => {
-                let col = 2 - (idx % 3); // Spiegelung
-                let x = m + col * (w + g), y = m + Math.floor(idx / 3) * (h + g);
-                doc.setDrawColor(0); doc.rect(x, y, w, h);
+                let col = 2 - (idx % 3); // Spiegelung für Duplex
+                let row = Math.floor(idx / 3);
+                let x = m + col * (w + g);
+                let y = m + row * (h + g);
+
+                // Rahmen zeichnen
+                doc.setDrawColor(0); 
+                doc.rect(x, y, w, h);
+
+                // QR-Code Größe berechnen (70% der Feldhöhe, damit genug Rand bleibt)
+                const qrSize = h * 0.7; 
+                
+                // Zentrierung berechnen: Startpunkt + (Hälfte des Feldes - Hälfte des QR-Codes)
+                const qrX = x + (w - qrSize) / 2;
+                const qrY = y + (h - qrSize) / 2;
+
                 const qrData = document.getElementById(s.qrCanvasId).toDataURL("image/png");
-                doc.addImage(qrData, 'PNG', x+10, y+10, 30, 30);
+                
+                // QR Code zentriert einfügen
+                doc.addImage(qrData, 'PNG', qrX, qrY, qrSize, qrSize);
             });
 
             i += 9;
